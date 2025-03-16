@@ -14,6 +14,8 @@ app.use("/profile", require("./profile.js"));
 app.use("/admin", require("./admin.js"));
 app.use("/talk", require("./talk.js"));
 app.use("/think", require("./think.js"));
+app.use("/search", require("./search.js"));
+app.use("/write", require("./write.js"));
 
 app.listen(9300);
 // https.createServer(options, app).listen(9200);
