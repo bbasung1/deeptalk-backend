@@ -63,7 +63,7 @@ router.get("/test/kakao", (req, res) => {
   })
 
   router.put("/signup", (req, res) => {
-    let tkn = req.headers.authorization.split("Bearer ")[1];
+    let tkn = req.body.jwt_token;
     let decodetoken = jwt.decode(tkn);
     let iss = decodetoken.iss;
     knex.transaction((trx) => {
