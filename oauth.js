@@ -95,7 +95,7 @@ router.get("/test/kakao", (req, res) => {
             apple_refresh_code: appleRefreshCode,
             apple_id_token: appleIdToken,
             kakao_id: kakaoid,
-            email: "bbasung@test.com"
+            email: req.body.email
           },
           "id"
         )
