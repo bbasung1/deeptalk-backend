@@ -32,8 +32,26 @@ router.post("/alram", (req, res) => {
     }
 })
 
-
-
+router.put("/id",(req,res)=>{
+    knex("profile")
+    .where("user_id",req.body.original_id)
+    .update({user_id:req.body.change_id})
+    .then(()=>{
+        res.status(200).json({success:1})
+    })
+    .catch((err)=>{
+        let errdata={
+            success:0,
+            errcode: err.errno,
+            errmsg:"기타 오류가 발생했습니다."
+        }
+        if(err.errno==1062){
+            errdata.errmsg="아이디가 중복됩니다."
+        }
+        console.error(err)
+        res.json(errdata)
+    })
+});
 
 router.post("/nickname/register", (req, res) => {
     const { user_id, nickname } = req.body;  // user_id와 nickname을 받음
