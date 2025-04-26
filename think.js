@@ -14,9 +14,14 @@ router.post("/",async(req,res)=>{
         id=await convert_our_id(user_id);
     };
     try{
-        const block_id= await knex('block_list').where('user_id',id).pluck('block_id');
-        const talk=await knex('think').whereNotIn('writer_id',block_id).select('*');
-        res.json(talk);
+        const think=await await knex('think')
+        .whereNotIn('writer_id', function() {
+          this.select('block_id')
+            .from('block_list')
+            .where('user_id', id);
+        })
+        .select('*');
+        res.json(think);
     }catch(err){
         console.error(err);
         res.status(500).json({error:"서버오류발생"});
