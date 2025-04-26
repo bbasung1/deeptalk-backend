@@ -13,8 +13,13 @@ router.post("/",async(req,res)=>{
         id=await convert_our_id(user_id);
     };
     try{
-        const block_id= await knex('block_list').where('user_id',id).pluck('block_id');
-        const talk=await knex('talk').whereNotIn('writer_id',block_id).select('*');
+        const talk=await knex('talk')
+        .whereNotIn('writer_id', function() {
+          this.select('block_id')
+            .from('block_list')
+            .where('user_id', id);
+        })
+        .select('*');
         res.json(talk);
     }catch(err){
         console.error(err);
