@@ -11,13 +11,10 @@ router.post("/",async(req,res)=>{
     console.log(user_id);
     if(user_id!=undefined){
         id=await convert_our_id(user_id);
-        console.log("계산된 id:"+id);
     };
     try{
-        console.log("넘어간 id:"+id);
         const block_id= await knex('block_list').where('user_id',id).pluck('block_id');
         const talk=await knex('talk').whereNotIn('writer_id',block_id).select('*');
-        console.log(talk);
         res.json(talk);
     }catch(err){
         console.error(err);
