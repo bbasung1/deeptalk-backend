@@ -1,17 +1,20 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-
+const convert_our_id= require('./general.js').convert_our_id;
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
 router.post("/",async(req,res)=>{
-    let id=req.body.id;
-    console.log(id);
-    if(id==undefined){
-        id=null;
-    }
+    let user_id=req.body.id;
+    let id=null;
+    console.log(user_id);
+    if(user_id!=undefined){
+        id=await convert_our_id(user_id);
+        console.log("계산된 id:"+id);
+    };
     try{
+        console.log("넘어간 id:"+id);
         const block_id= await knex('block_list').where('user_id',id).pluck('block_id');
         const talk=await knex('talk').whereNotIn('writer_id',block_id).select('*');
         console.log(talk);
