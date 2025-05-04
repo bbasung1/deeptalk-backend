@@ -53,6 +53,42 @@ router.put("/id",(req,res)=>{
     })
 });
 
+router.post("/id_check", async (req, res) => {
+    const { user_id } = req.body;
+
+    if (!user_id) {
+        return res.status(400).json({
+            success: false,
+            message: "user_id를 입력해주세요."
+        });
+    }
+
+    try {
+        const exists = await knex("profile").where({ user_id }).first();
+
+        if (exists) {
+            res.json({
+                success: true,
+                duplicated: true,
+                message: "이미 사용 중인 아이디입니다."
+            });
+        } else {
+            res.json({
+                success: true,
+                duplicated: false,
+                message: "사용 가능한 아이디입니다."
+            });
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            success: false,
+            message: "서버 오류가 발생했습니다."
+        });
+    }
+});
+
+
 router.post("/nickname/register", (req, res) => {
     const { user_id, nickname } = req.body;  // user_id와 nickname을 받음
 
@@ -118,13 +154,7 @@ router.get("/nickname/:user_id", (req, res) => {
 });
 
 
-module.exports = router;
-
-
-
-
-
-
 
 
 module.exports = router;
+
