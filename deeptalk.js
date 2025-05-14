@@ -5,12 +5,20 @@ const app = express();
 const fs = require("fs");
 dotenv.config();
 const https = require("https");
-let httpsmode = 1;
+const { error } = require("console");
+// let httpsmode = 1;
+try{
 const options = {
     ca: fs.readFileSync(process.env.CA),
     key: fs.readFileSync(process.env.KEY),
     cert: fs.readFileSync(process.env.CERT),
 };
+https.createServer(options, app).listen(9300, () => {
+    console.log("https server running");
+})
+}catch(err){
+    app.listen(9300, () => { console.log("http server is running") });
+}
 
 
 app.use(express.json());
@@ -25,10 +33,10 @@ app.use("/think", require("./think.js"));
 app.use("/search", require("./search.js"));
 app.use("/write", require("./write.js"));
 
-if (httpsmode == 0) {
-    app.listen(9300, () => { console.log("http server is running") });
-} else if (httpsmode == 1) {
-    https.createServer(options, app).listen(9300, () => {
-        console.log("https server running");
-    })
-};
+// if (httpsmode == 0) {
+//     app.listen(9300, () => { console.log("http server is running") });
+// } else if (httpsmode == 1) {
+//     https.createServer(options, app).listen(9300, () => {
+//         console.log("https server running");
+//     })
+// };
