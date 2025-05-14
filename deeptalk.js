@@ -1,9 +1,17 @@
 const express = require("express");
 const dotenv = require("dotenv");
-// const cors = require('cors');
+const cors = require('cors');
 const app = express();
 const fs = require("fs");
 dotenv.config();
+const https = require("https");
+let httpsmode = 1;
+const options = {
+    ca: fs.readFileSync(process.env.CA),
+    key: fs.readFileSync(process.env.KEY),
+    cert: fs.readFileSync(process.env.CERT),
+};
+
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -17,5 +25,10 @@ app.use("/think", require("./think.js"));
 app.use("/search", require("./search.js"));
 app.use("/write", require("./write.js"));
 
-app.listen(9300, () => { console.log("server is running") });
-// https.createServer(options, app).listen(9200);
+if (httpsmode == 0) {
+    app.listen(9300, () => { console.log("http server is running") });
+} else if (httpsmode == 1) {
+    https.createServer(options, app).listen(9300, () => {
+        console.log("https server running");
+    })
+};
