@@ -4,6 +4,8 @@ const dotenv = require("dotenv");
 const axios = require("axios");
 const jwt = require("jsonwebtoken");
 const knex = require("./knex.js");
+const qs = require("querystring");
+const fs = require('fs');
 
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -63,7 +65,7 @@ router.post("/kakao", (req, res) => {
 })
 
 router.get("/apple", (req, res) => {
-  connectioninfo(req);
+  console.log("test");
   const config = {
     client_id: process.env.APPLE_CLIENT_ID,
     redirect_uri: process.env.APPLE_LOGIN_REDIRECT_URL,
@@ -79,10 +81,13 @@ router.get("/apple", (req, res) => {
     Object.entries(config)
       .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
       .join("&");
+  console.log(queryString);
   res.redirect(queryString);
 });
 const createSignWithAppleSecret = () => {
-  const token = jwt.sign({}, process.env.APPLE_SECRET_KEY, {
+  const signWithApplePrivateKey = fs.readFileSync('/root/AuthKey_QBCF42TSA9.p8')
+  console.log(signWithApplePrivateKey)
+  const token = jwt.sign({}, signWithApplePrivateKey, {
     algorithm: "ES256",
     expiresIn: "1h",
     audience: "https://appleid.apple.com",
@@ -94,7 +99,6 @@ const createSignWithAppleSecret = () => {
 };
 
 router.post("/callback/apple", (req, res) => {
-  connectioninfo(req);
   let appleidtoken = req.body.id_token;
   let idtwk = jwt.decode(appleidtoken);
   let applesub = idtwk.sub;
