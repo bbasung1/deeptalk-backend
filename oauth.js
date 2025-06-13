@@ -162,7 +162,7 @@ router.put("/signup", async (req, res) => {
     appleIdToken = tkn;
   }
   try {
-    id = trx("user").insert(
+    id = await trx("user").insert(
       {
         kakao_access_code: kakaoAccessCode,
         kakao_refresh_code: kakaoRefreshCode,
