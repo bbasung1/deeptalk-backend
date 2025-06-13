@@ -6,6 +6,7 @@ const jwt = require("jsonwebtoken");
 const knex = require("./knex.js");
 const qs = require("querystring");
 const fs = require('fs');
+const convert_our_id = require('./general.js').convert_our_id;
 
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -193,4 +194,29 @@ router.put("/signup", (req, res) => {
       });
   });
 });
+
+router.delete("/account", async (req, res) => {
+  ourid = await convert_our_id(req.body.id);
+  const trx = await knex.transaction();
+  try {
+    await Promise.all([
+      trx("block_list").where("user_id", ourid).del(),
+      trx("comment").where("user_id", ourid).del(),
+      trx("talk").where("writer_id", ourid).del(),
+      trx("think").where("writer_id", ourid).del(),
+      trx("talk").where("writer_id", ourid).del(),
+    ]);
+    await trx("profile").where("id", ourid).del();
+    await trx("user").where("id", ourid).del();
+
+    await trx.commit();
+    console.log("complete");
+    res.status(200).json({ success: 1 });
+  } catch (err) {
+    await trx.rollback();
+    console.error(err);
+    res.status(500).json({ success: 0 });
+  }
+});
+
 module.exports = router;
