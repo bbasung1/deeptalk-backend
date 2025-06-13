@@ -12,6 +12,14 @@ router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 dotenv.config();
 
+router.get("/test1/kakao", async (req, res) => {
+  const trx = await knex.transaction();
+  test = await trx("user").insert({ twitter_id: 123123, email: "bbasung@test.com" })
+  console.log(test);
+  await trx("profile").insert({ id: test, user_id: "test" });
+  await trx.commit();
+});
+
 router.get("/test/kakao", (req, res) => {
   res.redirect(
     process.env.KAKAO_AUTH_URL +
@@ -129,70 +137,79 @@ router.post("/callback/apple", (req, res) => {
 });
 
 
-router.put("/signup", (req, res) => {
+router.put("/signup", async (req, res) => {
   let tkn = req.body.jwt_token;
   let decodetoken = jwt.decode(tkn);
   let iss = decodetoken.iss;
-  knex.transaction((trx) => {
-    let kakaoid = null;
-    let kakaoAccessCode = null;
-    let kakaoRefreshCode = null;
-    let kakaoIdToken = null;
-    let appleAccessCode = null;
-    let appleRefreshCode = null;
-    let appleIdToken = null;
-    if (iss == "https://kauth.kakao.com") {
-      kakaoAccessCode = req.body.access_token;
-      kakaoRefreshCode = req.body.refresh_token;
-      kakaoIdToken = tkn;
-      kakaoid = decodetoken.sub;
-    }
-    if (iss == "https://appleid.apple.com") {
-      appleAccessCode = req.body.access_token;
-      appleRefreshCode = req.body.refresh_token;
-      appleIdToken = tkn;
-    }
-    return trx
-      .insert(
-        {
-          kakao_access_code: kakaoAccessCode,
-          kakao_refresh_code: kakaoRefreshCode,
-          kakao_id_token: kakaoIdToken,
-          apple_access_code: appleAccessCode,
-          apple_refresh_code: appleRefreshCode,
-          apple_id_token: appleIdToken,
-          kakao_id: kakaoid,
-          email: req.body.email
-        },
-        "id"
-      )
-      .into("user")
-      // .then((ids) => {
-      //   return trx
-      //     .insert({
-      //       id: ids[0],
-      //       nickname: req.body.name,
-      //       profile_image: req.body.profileImage,
-      //     })
-      //     .into("profile")
-      //     .then(() => {
-      //       let friends = req.body.friends;
-      //       if (friends.length > maxFriends) {
-      //         throw new Error("You have reached the maximum number of friends");
-      //       }
-      //       friends.forEach((friend) => {
-      //         friend.user_id = ids[0];
-      //       });
-      //       return trx.insert(friends).into("friend_list");
-      //     });
-      // })
-      .then(() => {
-        res.json({ success: 1 });
-      })
-      .catch((err) => {
-        res.json({ success: 0, error: err });
-      });
-  });
+  const trx = await knex.transaction();
+  // knex.transaction((trx) => {
+  let kakaoid = null;
+  let kakaoAccessCode = null;
+  let kakaoRefreshCode = null;
+  let kakaoIdToken = null;
+  let appleAccessCode = null;
+  let appleRefreshCode = null;
+  let appleIdToken = null;
+  if (iss == "https://kauth.kakao.com") {
+    kakaoAccessCode = req.body.access_token;
+    kakaoRefreshCode = req.body.refresh_token;
+    kakaoIdToken = tkn;
+    kakaoid = decodetoken.sub;
+  }
+  if (iss == "https://appleid.apple.com") {
+    appleAccessCode = req.body.access_token;
+    appleRefreshCode = req.body.refresh_token;
+    appleIdToken = tkn;
+  }
+  try {
+    id = await trx("user").insert(
+      {
+        kakao_access_code: kakaoAccessCode,
+        kakao_refresh_code: kakaoRefreshCode,
+        kakao_id_token: kakaoIdToken,
+        apple_access_code: appleAccessCode,
+        apple_refresh_code: appleRefreshCode,
+        apple_id_token: appleIdToken,
+        kakao_id: kakaoid,
+        email: req.body.email
+      }
+    );
+    await trx("profile").insert({ id: id, user_id: req.body.user_id, nickname: req.body.nickname });
+    await trx.commit();
+    console.log("complete");
+    res.status(200).json({ success: 1 });
+  } catch (err) {
+    await trx.rollback();
+    console.error(err);
+    res.status(500).json({ success: 0 });
+  }
+  // .into("user")
+  // // .then((ids) => {
+  // //   return trx
+  // //     .insert({
+  // //       id: ids[0],
+  // //       nickname: req.body.name,
+  // //       profile_image: req.body.profileImage,
+  // //     })
+  // //     .into("profile")
+  // //     .then(() => {
+  // //       let friends = req.body.friends;
+  // //       if (friends.length > maxFriends) {
+  // //         throw new Error("You have reached the maximum number of friends");
+  // //       }
+  // //       friends.forEach((friend) => {
+  // //         friend.user_id = ids[0];
+  // //       });
+  // //       return trx.insert(friends).into("friend_list");
+  // //     });
+  // // })
+  // .then(() => {
+  //   res.json({ success: 1 });
+  // })
+  // .catch((err) => {
+  //   res.json({ success: 0, error: err });
+  // });
+  // });
 });
 
 router.delete("/account", async (req, res) => {
