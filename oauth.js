@@ -236,4 +236,18 @@ router.delete("/account", async (req, res) => {
   }
 });
 
+router.post("/check_age", (req, res) => {
+  let tmpdate = req.body.birthdate;
+  if (!tmpdate) {
+    return res.status(400).json({ err: 'birthday required' });
+  }
+  const birthdate = new Date(tmpdate);
+  const today = new Date();
+  const agediff = today.getFullYear() - birthdate.getFullYear();
+  const agecheck = today.getMonth() > birthdate.getMonth || (today.getMonth() === birthdate.getMonth() && today.getDate() >= birthdate.getDate());
+  const age = agecheck ? agediff : agediff - 1;
+  const checkage = age >= 14;
+  return res.status(200).json({ checkage });
+})
+
 module.exports = router;
