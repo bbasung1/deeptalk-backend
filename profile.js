@@ -228,6 +228,47 @@ router.post("/theme", async (req, res) => {
 });
 
 
+// mute 와 block 구현
+router.post("/block", (req, res) => handleBlockAction(req, res, "block"));
+router.post("/mute", (req, res) => handleBlockAction(req, res, "mute"));
+
+const TYPE_BLOCK = 0;
+const TYPE_MUTE = 1;
+const TYPE_REPORT = 2;
+
+const typeMap = {
+    "block": TYPE_BLOCK,
+    "mute": TYPE_MUTE,
+    "report": TYPE_REPORT
+};
+
+async function handleBlockAction(req, res, actionType) {
+    const { user_id, target_id } = req.body;
+
+    if (!user_id || !target_id) {
+        return res.status(400).json({ success: false, message: "user_id와 target_id가 필요합니다." });
+    }
+
+    if (!(actionType in typeMap)) {
+        return res.status(400).json({ success: false, message: "지원하지 않는 타입입니다." });
+    }
+
+    try {
+        await knex("block_list").insert({
+            user_id: user_id,
+            blocked_user_id: target_id,
+            type: typeMap[actionType]
+        });
+        res.json({ success: true, message: `${actionType} 등록 완료` });
+    } catch (err) {
+        if (err.errno === 1062) {
+            res.status(409).json({ success: false, message: `이미 ${actionType}된 사용자입니다.` });
+        } else {
+            console.error(err);
+            res.status(500).json({ success: false, message: "서버 오류" });
+        }
+    }
+}
 
 module.exports = router;
 
