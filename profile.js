@@ -188,4 +188,46 @@ async function handleBlockAction(req, res, actionType) {
     }
 }
 
+
+// 테마 설정
+router.post("/theme", async (req, res) => {
+    const { user_id, theme } = req.body;
+
+    // 입력값 유효성 검사
+    if (!user_id || theme === undefined) {
+        return res.status(400).json({
+            success: false,
+            message: "user_id와 theme 값이 필요합니다."
+        });
+    }
+
+    try {
+        const updated = await knex("profile")
+            .where({ user_id })
+            .update({ theme });
+
+        if (updated === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "해당 user_id에 대한 profile이 존재하지 않습니다."
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "테마 업데이트 완료",
+            theme: theme
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            success: false,
+            message: "서버 오류"
+        });
+    }
+});
+
+
+
 module.exports = router;
+
