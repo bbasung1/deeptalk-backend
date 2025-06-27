@@ -212,4 +212,108 @@ router.post("/check_age", (req, res) => {
   return res.status(200).json({ checkage });
 })
 
+router.post("/login", (req, res) => {
+  console.log(req.headers.authorization);
+  let tkn = req.headers.authorization.split("Bearer ")[1];
+  let decodetoken = jwt.decode(tkn);
+  console.log(decodetoken);
+  let iss = decodetoken.iss;
+  let sub = decodetoken.sub;
+  if (iss == "https://kauth.kakao.com") {
+    knex
+      .select("kakao_access_code", "kakao_refresh_code", "kakao_id_token", "id","deletetime")
+      .from("user")
+      .where("kakao_id", sub)
+      .then((tokendata) => {
+        console.log(tokendata);
+        axios
+          .post(
+            "https://kauth.kakao.com/oauth/token",
+            qs.stringify({
+              grant_type: "refresh_token",
+              client_id: process.env.CLIENT_ID,
+              refresh_token: tokendata[0].kakao_refresh_code,
+              client_secret: process.env.KAKAO_CLIENT_SECRET,
+            }),
+            {
+              headers: {
+                "Content-Type": `application/x-www-form-urlencoded`,
+              },
+            }
+          )
+          .then((newdata) => {
+            let senddata = newdata.data;
+            let insertdata = {
+              kakao_access_code: senddata.access_token,
+              kakao_id_token: senddata.id_token,
+            };
+            if (senddata.refresh_token) {
+              insertdata.kakao_refresh_code = senddata.refresh_token;
+            }
+            senddata.willdelete=false;
+            if(tokendata[0].deletetime != null){
+              senddata.willdelete=true;
+            }
+            knex("user")
+              .where("kakao_id", sub)
+              .update(insertdata)
+              .then(() => {
+                res.json(senddata);
+              });
+          })
+          .catch((err) => {
+            console.log(err);
+            res.json(err);
+          });
+      });
+  } else if (iss == "https://appleid.apple.com") {
+    knex
+      .select("apple_access_code", "apple_refresh_code", "apple_id_token","deletetime")
+      .from("user")
+      .where("apple_id", sub)
+      .then((tokendata) => {
+        axios
+          .post(
+            "https://appleid.apple.com/auth/token",
+            qs.stringify({
+              grant_type: "refresh_token",
+              client_secret: createSignWithAppleSecret(),
+              client_id: process.env.APPLE_CLIENT_ID,
+              redirect_uri: process.env.APPLE_REDIRECT_URI,
+              refresh_token: tokendata[0].apple_refresh_code,
+            }),
+            {
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+            }
+          )
+          .then((newdata) => {
+            let senddata = newdata.data;
+            let insertdata = {
+              apple_access_code: senddata.access_token,
+              apple_id_token: senddata.id_token,
+            };
+            if (senddata.refresh_token) {
+              insertdata.apple_refresh_code = senddata.refresh_token;
+            }
+            senddata.willdelete=false;
+            if(tokendata[0].deletetime != null){
+              senddata.willdelete=true;
+            }
+            knex("user")
+              .where("apple_id", sub)
+              .update(insertdata)
+              .then(() => {
+                res.json(senddata);
+              });
+          })
+          .catch((err) => {
+            console.log(err);
+            res.json(err);
+          });
+      });
+  }
+});
+
 module.exports = router;
