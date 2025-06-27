@@ -214,9 +214,10 @@ router.put("/signup", async (req, res) => {
 
 router.delete("/account", async (req, res) => {
   ourid = await convert_our_id(req.body.id);
+  const reason = req.body.reason;
   const time = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   try {
-    knex('user').where("id", ourid).update({ deletetime: time });
+    knex('user').where("id", ourid).update({ deletetime: time, delete_reason: reason });
     res.json({ success: 1 });
   } catch (err) {
     console.log(err);

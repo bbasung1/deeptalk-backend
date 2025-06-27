@@ -44,9 +44,10 @@ if (!httpsmode) {
 };
 
 cron.schedule('0 0 * * *', async () => {
-    const userset = knex('user').select('id').where('deletetime', '<=', now);
+    const userset = knex('user').select('id', 'delete_reason').where('deletetime', '<=', now);
     for (const user of userset) {
         const ourid = user.id;
+        const reason = user.delete_reason;
         const trx = await knex.transaction();
         try {
             await Promise.all([
@@ -57,6 +58,7 @@ cron.schedule('0 0 * * *', async () => {
                 trx("talk").where("writer_id", ourid).del(),
             ]);
             await trx("profile").where("id", ourid).del();
+            await trx("delete_reason").insert({ id: ourid, delete_reason: reason });
             await trx("user").where("id", ourid).del();
 
             await trx.commit();
