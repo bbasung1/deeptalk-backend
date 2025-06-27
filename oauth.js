@@ -316,4 +316,14 @@ router.post("/login", (req, res) => {
   }
 });
 
+router.post("/cancel_delete",async(req,res)=>{
+  const ourid = await convert_our_id(req.body.id);
+  knex('user').where("id",ourid).update({deletetime:null,delete_reason:null}).then(()=>{
+    res.json({success:1});
+  }).catch((err)=>{
+    res.json({success:0,err: err});
+  })
+
+})
+
 module.exports = router;
