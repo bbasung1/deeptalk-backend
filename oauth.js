@@ -183,56 +183,18 @@ router.put("/signup", async (req, res) => {
     console.error(err);
     res.status(500).json({ success: 0 });
   }
-  // .into("user")
-  // // .then((ids) => {
-  // //   return trx
-  // //     .insert({
-  // //       id: ids[0],
-  // //       nickname: req.body.name,
-  // //       profile_image: req.body.profileImage,
-  // //     })
-  // //     .into("profile")
-  // //     .then(() => {
-  // //       let friends = req.body.friends;
-  // //       if (friends.length > maxFriends) {
-  // //         throw new Error("You have reached the maximum number of friends");
-  // //       }
-  // //       friends.forEach((friend) => {
-  // //         friend.user_id = ids[0];
-  // //       });
-  // //       return trx.insert(friends).into("friend_list");
-  // //     });
-  // // })
-  // .then(() => {
-  //   res.json({ success: 1 });
-  // })
-  // .catch((err) => {
-  //   res.json({ success: 0, error: err });
-  // });
-  // });
 });
 
 router.delete("/account", async (req, res) => {
   ourid = await convert_our_id(req.body.id);
-  const trx = await knex.transaction();
+  const reason = req.body.reason;
+  const time = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   try {
-    await Promise.all([
-      trx("block_list").where("user_id", ourid).del(),
-      trx("comment").where("user_id", ourid).del(),
-      trx("talk").where("writer_id", ourid).del(),
-      trx("think").where("writer_id", ourid).del(),
-      trx("talk").where("writer_id", ourid).del(),
-    ]);
-    await trx("profile").where("id", ourid).del();
-    await trx("user").where("id", ourid).del();
-
-    await trx.commit();
-    console.log("complete");
-    res.status(200).json({ success: 1 });
+    knex('user').where("id", ourid).update({ deletetime: time, delete_reason: reason });
+    res.json({ success: 1 });
   } catch (err) {
-    await trx.rollback();
-    console.error(err);
-    res.status(500).json({ success: 0 });
+    console.log(err);
+    res.status(500).json({ uccess: 0, err: err })
   }
 });
 
@@ -248,6 +210,120 @@ router.post("/check_age", (req, res) => {
   const age = agecheck ? agediff : agediff - 1;
   const checkage = age >= 14;
   return res.status(200).json({ checkage });
+})
+
+router.post("/login", (req, res) => {
+  console.log(req.headers.authorization);
+  let tkn = req.headers.authorization.split("Bearer ")[1];
+  let decodetoken = jwt.decode(tkn);
+  console.log(decodetoken);
+  let iss = decodetoken.iss;
+  let sub = decodetoken.sub;
+  if (iss == "https://kauth.kakao.com") {
+    knex
+      .select("kakao_access_code", "kakao_refresh_code", "kakao_id_token", "id","deletetime")
+      .from("user")
+      .where("kakao_id", sub)
+      .then((tokendata) => {
+        console.log(tokendata);
+        axios
+          .post(
+            "https://kauth.kakao.com/oauth/token",
+            qs.stringify({
+              grant_type: "refresh_token",
+              client_id: process.env.CLIENT_ID,
+              refresh_token: tokendata[0].kakao_refresh_code,
+              client_secret: process.env.KAKAO_CLIENT_SECRET,
+            }),
+            {
+              headers: {
+                "Content-Type": `application/x-www-form-urlencoded`,
+              },
+            }
+          )
+          .then((newdata) => {
+            let senddata = newdata.data;
+            let insertdata = {
+              kakao_access_code: senddata.access_token,
+              kakao_id_token: senddata.id_token,
+            };
+            if (senddata.refresh_token) {
+              insertdata.kakao_refresh_code = senddata.refresh_token;
+            }
+            senddata.willdelete=false;
+            if(tokendata[0].deletetime != null){
+              senddata.willdelete=true;
+            }
+            knex("user")
+              .where("kakao_id", sub)
+              .update(insertdata)
+              .then(() => {
+                res.json(senddata);
+              });
+          })
+          .catch((err) => {
+            console.log(err);
+            res.json(err);
+          });
+      });
+  } else if (iss == "https://appleid.apple.com") {
+    knex
+      .select("apple_access_code", "apple_refresh_code", "apple_id_token","deletetime")
+      .from("user")
+      .where("apple_id", sub)
+      .then((tokendata) => {
+        axios
+          .post(
+            "https://appleid.apple.com/auth/token",
+            qs.stringify({
+              grant_type: "refresh_token",
+              client_secret: createSignWithAppleSecret(),
+              client_id: process.env.APPLE_CLIENT_ID,
+              redirect_uri: process.env.APPLE_REDIRECT_URI,
+              refresh_token: tokendata[0].apple_refresh_code,
+            }),
+            {
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+            }
+          )
+          .then((newdata) => {
+            let senddata = newdata.data;
+            let insertdata = {
+              apple_access_code: senddata.access_token,
+              apple_id_token: senddata.id_token,
+            };
+            if (senddata.refresh_token) {
+              insertdata.apple_refresh_code = senddata.refresh_token;
+            }
+            senddata.willdelete=false;
+            if(tokendata[0].deletetime != null){
+              senddata.willdelete=true;
+            }
+            knex("user")
+              .where("apple_id", sub)
+              .update(insertdata)
+              .then(() => {
+                res.json(senddata);
+              });
+          })
+          .catch((err) => {
+            console.log(err);
+            res.json(err);
+          });
+      });
+  }
+});
+
+router.post("/cancel_delete",async(req,res)=>{
+  const ourid = await convert_our_id(req.body.id);
+  knex('user').where("id",ourid).update({deletetime:null,delete_reason:null}).then(()=>{
+    res.json({success:1});
+  }).catch((err)=>{
+    res.json({success:0,err: err});
+  })
+
 })
 
 module.exports = router;

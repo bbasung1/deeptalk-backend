@@ -6,6 +6,8 @@ const fs = require("fs");
 dotenv.config();
 const https = require("https");
 const { error } = require("console");
+const cron = require('node-cron');
+const knex = require('./knex.js');
 
 let httpsmode = true;
 let options = {}
@@ -40,3 +42,34 @@ if (!httpsmode) {
         console.log("https server running");
     })
 };
+
+cron.schedule('0 0 * * *', async () => {
+    console.log("cron working");
+    const now=new Date();
+    const userset = await knex('user').select('id', 'delete_reason').where('deletetime', '<=', now);
+    console.log(userset);
+    for (const user of userset) {
+        console.log(user);
+        const ourid = user.id;
+        const reason = user.delete_reason;
+        const trx = await knex.transaction();
+        try {
+            await Promise.all([
+                trx("block_list").where("user_id", ourid).del(),
+                trx("comment").where("user_id", ourid).del(),
+                trx("talk").where("writer_id", ourid).del(),
+                trx("think").where("writer_id", ourid).del(),
+                trx("talk").where("writer_id", ourid).del(),
+            ]);
+            await trx("profile").where("id", ourid).del();
+            await trx("delete_reason").insert({ id: ourid, delete_reason: reason });
+            await trx("user").where("id", ourid).del();
+
+            await trx.commit();
+            console.log("complete");
+        } catch (err) {
+            await trx.rollback();
+            console.error(err);
+        }
+    }
+});
