@@ -183,33 +183,6 @@ router.put("/signup", async (req, res) => {
     console.error(err);
     res.status(500).json({ success: 0 });
   }
-  // .into("user")
-  // // .then((ids) => {
-  // //   return trx
-  // //     .insert({
-  // //       id: ids[0],
-  // //       nickname: req.body.name,
-  // //       profile_image: req.body.profileImage,
-  // //     })
-  // //     .into("profile")
-  // //     .then(() => {
-  // //       let friends = req.body.friends;
-  // //       if (friends.length > maxFriends) {
-  // //         throw new Error("You have reached the maximum number of friends");
-  // //       }
-  // //       friends.forEach((friend) => {
-  // //         friend.user_id = ids[0];
-  // //       });
-  // //       return trx.insert(friends).into("friend_list");
-  // //     });
-  // // })
-  // .then(() => {
-  //   res.json({ success: 1 });
-  // })
-  // .catch((err) => {
-  //   res.json({ success: 0, error: err });
-  // });
-  // });
 });
 
 router.delete("/account", async (req, res) => {
@@ -223,26 +196,6 @@ router.delete("/account", async (req, res) => {
     console.log(err);
     res.status(500).json({ uccess: 0, err: err })
   }
-  // const trx = await knex.transaction();
-  // try {
-  //   await Promise.all([
-  //     trx("block_list").where("user_id", ourid).del(),
-  //     trx("comment").where("user_id", ourid).del(),
-  //     trx("talk").where("writer_id", ourid).del(),
-  //     trx("think").where("writer_id", ourid).del(),
-  //     trx("talk").where("writer_id", ourid).del(),
-  //   ]);
-  //   await trx("profile").where("id", ourid).del();
-  //   await trx("user").where("id", ourid).del();
-
-  //   await trx.commit();
-  //   console.log("complete");
-  //   res.status(200).json({ success: 1 });
-  // } catch (err) {
-  //   await trx.rollback();
-  //   console.error(err);
-  //   res.status(500).json({ success: 0 });
-  // }
 });
 
 router.post("/check_age", (req, res) => {

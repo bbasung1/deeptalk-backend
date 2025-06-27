@@ -44,8 +44,12 @@ if (!httpsmode) {
 };
 
 cron.schedule('0 0 * * *', async () => {
-    const userset = knex('user').select('id', 'delete_reason').where('deletetime', '<=', now);
+    console.log("cron working");
+    const now=new Date();
+    const userset = await knex('user').select('id', 'delete_reason').where('deletetime', '<=', now);
+    console.log(userset);
     for (const user of userset) {
+        console.log(user);
         const ourid = user.id;
         const reason = user.delete_reason;
         const trx = await knex.transaction();
