@@ -214,26 +214,34 @@ router.put("/signup", async (req, res) => {
 
 router.delete("/account", async (req, res) => {
   ourid = await convert_our_id(req.body.id);
-  const trx = await knex.transaction();
+  const time = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   try {
-    await Promise.all([
-      trx("block_list").where("user_id", ourid).del(),
-      trx("comment").where("user_id", ourid).del(),
-      trx("talk").where("writer_id", ourid).del(),
-      trx("think").where("writer_id", ourid).del(),
-      trx("talk").where("writer_id", ourid).del(),
-    ]);
-    await trx("profile").where("id", ourid).del();
-    await trx("user").where("id", ourid).del();
-
-    await trx.commit();
-    console.log("complete");
-    res.status(200).json({ success: 1 });
+    knex('user').where("id", ourid).update({ deletetime: time });
+    res.json({ success: 1 });
   } catch (err) {
-    await trx.rollback();
-    console.error(err);
-    res.status(500).json({ success: 0 });
+    console.log(err);
+    res.status(500).json({ uccess: 0, err: err })
   }
+  // const trx = await knex.transaction();
+  // try {
+  //   await Promise.all([
+  //     trx("block_list").where("user_id", ourid).del(),
+  //     trx("comment").where("user_id", ourid).del(),
+  //     trx("talk").where("writer_id", ourid).del(),
+  //     trx("think").where("writer_id", ourid).del(),
+  //     trx("talk").where("writer_id", ourid).del(),
+  //   ]);
+  //   await trx("profile").where("id", ourid).del();
+  //   await trx("user").where("id", ourid).del();
+
+  //   await trx.commit();
+  //   console.log("complete");
+  //   res.status(200).json({ success: 1 });
+  // } catch (err) {
+  //   await trx.rollback();
+  //   console.error(err);
+  //   res.status(500).json({ success: 0 });
+  // }
 });
 
 router.post("/check_age", (req, res) => {
