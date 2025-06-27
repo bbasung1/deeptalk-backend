@@ -254,6 +254,8 @@ router.post("/login", (req, res) => {
             if(tokendata[0].deletetime != null){
               senddata.willdelete=true;
             }
+            delete senddata.token_type;
+            delete senddata.expires_in;
             knex("user")
               .where("kakao_id", sub)
               .update(insertdata)
