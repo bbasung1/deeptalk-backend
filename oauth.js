@@ -8,17 +8,17 @@ const qs = require("querystring");
 const fs = require('fs');
 const mailer = require("nodemailer");
 const convert_our_id = require('./general.js').convert_our_id;
-
+const MEMBER_COUNT = 85;
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 dotenv.config();
 
-router.get("/test1/kakao", async (req, res) => {
-  const trx = await knex.transaction();
-  test = await trx("user").insert({ twitter_id: 123123, email: "bbasung@test.com" })
-  console.log(test);
-  await trx("profile").insert({ id: test, user_id: "test" });
-  await trx.commit();
+router.get("/test1", async (req, res) => {
+  test = await knex("user").whereNull("deletetime").count({ "test": "*" });
+  if (MEMBER_COUNT < test[0].test) {
+    return res.status(500).json({ success: 0, err_code: 5001, msg: "멤버가 최대치에 도달했습니다!" });
+  }
+  res.send(test[0]);
 });
 
 router.get("/test/kakao", (req, res) => {
@@ -143,7 +143,10 @@ router.put("/signup", async (req, res) => {
   let decodetoken = jwt.decode(tkn);
   let iss = decodetoken.iss;
   const trx = await knex.transaction();
-  // knex.transaction((trx) => {
+  const member = await knex("user").whereNull("deletetime").count({ "member": "*" });
+  if (MEMBER_COUNT < member[0].member) {
+    return res.status(500).json({ success: 0, err_code: 5001, msg: "멤버가 최대치에 도달했습니다!" });
+  }
   let kakaoid = null;
   let kakaoAccessCode = null;
   let kakaoRefreshCode = null;
