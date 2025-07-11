@@ -345,8 +345,12 @@ router.post("/mail_check", async (req, res) => {
   let mailOptions = transporter.sendMail({
     from: "test",
     to: mail_addr,
-    subject: '회원가입을 위한 인증번호를 입력해주세요.',
-    text: "인증번호: " + authnum,
+    subject: '딥톡 인증번호 도착!',
+    text: `안녕하세요, 딥톡 운영자 진지입니다.\n
+    따뜻하면서도 안전한 공간, 딥톡에 함께해 주셔서 감사해요.\n\n
+    아래 인증번호를 입력해 주세요:\n[인증번호: ` + authnum + `]\n\n
+    인증번호는 10분 동안 유효해요.\n\n
+    딥톡 운영자 진지 드림`,
   });
   transporter.sendMail(mailOptions, function (error) {
     if (error) {
