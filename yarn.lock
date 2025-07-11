@@ -679,6 +679,11 @@ node-cron@^4.1.1:
   resolved "https://registry.yarnpkg.com/node-cron/-/node-cron-4.1.1.tgz#1b9a27138cd08fea46f23fc024c7761c5801658c"
   integrity sha512-oJj9CYV7teeCVs+y2Efi5IQ4FGmAYbsXQOehc1AGLlwteec8pC7DjBCUzSyRQ0LYa+CRCgmD+vtlWQcnPpXowA==
 
+nodemailer@^7.0.4:
+  version "7.0.4"
+  resolved "https://registry.yarnpkg.com/nodemailer/-/nodemailer-7.0.4.tgz#1204ca673026e93155d4a46eaa7c498a30fdd72a"
+  integrity sha512-9O00Vh89/Ld2EcVCqJ/etd7u20UhME0f/NToPfArwPEe1Don1zy4mAIz6ariRr7mJ2RDxtaDzN0WJVdVXPtZaw==
+
 object-assign@^4:
   version "4.1.1"
   resolved "https://registry.yarnpkg.com/object-assign/-/object-assign-4.1.1.tgz#2109adc7965887cfc05cbbd442cac8bfbb360863"

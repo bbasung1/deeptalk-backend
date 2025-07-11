@@ -6,6 +6,7 @@ const jwt = require("jsonwebtoken");
 const knex = require("./knex.js");
 const qs = require("querystring");
 const fs = require('fs');
+const mailer = require("nodemailer");
 const convert_our_id = require('./general.js').convert_our_id;
 
 router.use(express.json());
@@ -221,7 +222,7 @@ router.post("/login", (req, res) => {
   let sub = decodetoken.sub;
   if (iss == "https://kauth.kakao.com") {
     knex
-      .select("kakao_access_code", "kakao_refresh_code", "kakao_id_token", "id","deletetime")
+      .select("kakao_access_code", "kakao_refresh_code", "kakao_id_token", "id", "deletetime")
       .from("user")
       .where("kakao_id", sub)
       .then((tokendata) => {
@@ -250,9 +251,9 @@ router.post("/login", (req, res) => {
             if (senddata.refresh_token) {
               insertdata.kakao_refresh_code = senddata.refresh_token;
             }
-            senddata.willdelete=false;
-            if(tokendata[0].deletetime != null){
-              senddata.willdelete=true;
+            senddata.willdelete = false;
+            if (tokendata[0].deletetime != null) {
+              senddata.willdelete = true;
             }
             delete senddata.token_type;
             delete senddata.expires_in;
@@ -270,7 +271,7 @@ router.post("/login", (req, res) => {
       });
   } else if (iss == "https://appleid.apple.com") {
     knex
-      .select("apple_access_code", "apple_refresh_code", "apple_id_token","deletetime")
+      .select("apple_access_code", "apple_refresh_code", "apple_id_token", "deletetime")
       .from("user")
       .where("apple_id", sub)
       .then((tokendata) => {
@@ -299,9 +300,9 @@ router.post("/login", (req, res) => {
             if (senddata.refresh_token) {
               insertdata.apple_refresh_code = senddata.refresh_token;
             }
-            senddata.willdelete=false;
-            if(tokendata[0].deletetime != null){
-              senddata.willdelete=true;
+            senddata.willdelete = false;
+            if (tokendata[0].deletetime != null) {
+              senddata.willdelete = true;
             }
             knex("user")
               .where("apple_id", sub)
@@ -318,14 +319,47 @@ router.post("/login", (req, res) => {
   }
 });
 
-router.post("/cancel_delete",async(req,res)=>{
+router.post("/cancel_delete", async (req, res) => {
   const ourid = await convert_our_id(req.body.id);
-  knex('user').where("id",ourid).update({deletetime:null,delete_reason:null}).then(()=>{
-    res.json({success:1});
-  }).catch((err)=>{
-    res.json({success:0,err: err});
+  knex('user').where("id", ourid).update({ deletetime: null, delete_reason: null }).then(() => {
+    res.json({ success: 1 });
+  }).catch((err) => {
+    res.json({ success: 0, err: err });
   })
 
 })
+
+router.post("/mail_check", async (req, res) => {
+  const mail_addr = req.body.mail_addr;
+  const authnum = Math.random().toString().substr(2, 6);
+  const transporter = mailer.createTransport({
+    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    auth: {
+      user: "wbba1650@gmail.com",
+      pass: process.env.GOOGLE_MAIL_PASSWORD,
+    },
+  });
+  let mailOptions = transporter.sendMail({
+    from: "test",
+    to: mail_addr,
+    subject: '딥톡 인증번호 도착!',
+    text: `안녕하세요, 딥톡 운영자 진지입니다.\n
+    따뜻하면서도 안전한 공간, 딥톡에 함께해 주셔서 감사해요.\n\n
+    아래 인증번호를 입력해 주세요:\n[인증번호: ` + authnum + `]\n\n
+    인증번호는 10분 동안 유효해요.\n\n
+    딥톡 운영자 진지 드림`,
+  });
+  transporter.sendMail(mailOptions, function (error) {
+    if (error) {
+      console.log(error);
+    }
+    // console.log("Finish sending email : " + info.response);
+    res.json({ authnum: authnum });
+    transporter.close()
+  });
+});
 
 module.exports = router;
