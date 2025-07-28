@@ -365,4 +365,11 @@ router.post("/mail_check", async (req, res) => {
   });
 });
 
+router.get("/remain_people", async (req, res) => {
+  let [test] = await knex("user").whereNull("deletetime").count({ "cur_member": "*" });
+  test.max_member = MEMBER_COUNT;
+  console.log(test);
+  res.json(test);
+});
+
 module.exports = router;
