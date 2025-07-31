@@ -34,6 +34,9 @@ app.use("/think", require("./think.js"));
 app.use("/search", require("./search.js"));
 app.use("/write", require("./write.js"));
 app.use("/useractivity", require("./useractivity.js"));
+app.use("/admin", require("./admin.js"));
+
+app.use(cors());
 
 if (!httpsmode) {
     app.listen(9300, () => { console.log("http server is running") });
@@ -45,7 +48,7 @@ if (!httpsmode) {
 
 cron.schedule('0 0 * * *', async () => {
     console.log("cron working");
-    const now=new Date();
+    const now = new Date();
     const userset = await knex('user').select('id', 'delete_reason').where('deletetime', '<=', now);
     console.log(userset);
     for (const user of userset) {
