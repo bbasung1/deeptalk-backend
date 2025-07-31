@@ -40,24 +40,27 @@ function admin_block(res) {
     <tr>
     <td>신고번호</td>
     <td>신고자 id</td>
-    <td>id</td>
+    <td>신고된 id</td>
+    <td>게시물 유형</td>
+    <td>게시물 id</td>
     <td>사유</td>
     <td>신고일자</td>
-    <td>업데이트 일자</td>
     <td>차단여부</td>
 </tr>
     `;
     knex
         .select()
-        .from("reports")
+        .from("report")
         .then((list1) => {
             for (test of list1) {
-                data += `<tr><td>` + test.id + `</td>`;
+                data += `<tr><td>` + test.report_id + `</td>`;
                 data += `<td>` + test.reporter_id + `</td>`;
                 data += `<td>` + test.reported_id + `</td>`;
+                data += `<td>` + test.type + `</td>`;
+                data += `<td>` + test.post_id + `</td>`;
                 data += `<td>` + test.reason + `</td>`;
-                data += `<td>` + test.created_at.toLocaleString() + `</td>`;
-                data += `<td>` + test.updated_at.toLocaleString() + `</td></tr>`;
+                data += `<td>` + test.report_time.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) + `</td>`;
+                data += `<td>` + test.decision + `</td></tr>`;
             }
             data += `</table>`;
             admin_html("신고현황", data, res);
@@ -125,7 +128,7 @@ async function member(res) {
                     <td>${test.email}</td>
                     <td>${birthdate}</td>
                     <td>${test.kakao_id ? '카카오' : '애플'}</td>
-                    <td>${test.created_at}</td>
+                    <td>${test.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
                     <td>${test.servicealram}</td>
                     <td>${test.useralram}</td>
                     <td>${test.marketalram}</td>
