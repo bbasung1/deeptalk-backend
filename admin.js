@@ -34,7 +34,7 @@ ${body}
 }
 function admin_block(res) {
     let data = `
-  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><br>
+  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a><br>
   <h1>신고 명단</h1>
     <table border="1">
     <tr>
@@ -86,7 +86,7 @@ async function member(res) {
                 .count('id as count')
         ]);
         let data = `
-            <a href="/admin/logout">logout </a><a href="/admin/setblock">신고 현황 페이지로</a><br>
+            <a href="/admin/logout">logout <a href="/admin/setblock">신고 현황 페이지로 </a><a href="/admin/post">글 현황 페이지로</a><br>
             <h1>회원 통계</h1>
             <table border="1">
                 <tr>
@@ -148,6 +148,57 @@ async function member(res) {
     }
 }
 
+async function post(res) {
+    let data = `
+        <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a><br>
+<h1>글 목록</h1>
+<table border="1">
+<tr>
+    <td>게시물 유형</td>
+    <td>게시물 번호</td>
+    <td>제목</td>
+    <td>내용</td>
+    <td>사진</td>
+    <td>인용</td>
+    <td>게시 날짜</td>
+    <td>좋아요</td>
+    <td>인용수</td>
+    <td>댓글수</td>
+    <td>북마크수</td>
+    <td>조회수</td>
+</tr>
+  `;
+    // const test = await knex.select("*").from('talk').union(function () { this.select('think_num as id', 'writer_id', 'header', 'subject', 'reported', 'timestamp', 'like', 'quote', 'comment', 'mylist', 'views').from('think') });
+    const [tmp1, tmp2] = await Promise.all([knex("talk").select("*"), knex("think").select("*")]);
+    tmp3 = [...tmp1, ...tmp2];
+    tmp3.sort((a, b) => {
+        return new Date(a.timestamp) - new Date(b.timestamp);
+    });
+    for (i of tmp3) {
+        console.log(i);
+        data += `
+        <tr>
+    <td>${i.talk_num ? "jam-talk" : "jin-talk"}</td>
+    <td>${i.talk_num || i.think_num}</td>
+    <td>${i.header}</td>
+    <td>${i.subject}</td>
+    <td>${i.photo}</td>
+    <td>${i.quote}</td>
+    <td>${i.timestamp.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
+    <td>${i.like}</td>
+    <td>${i.quote_num}</td>
+    <td>${i.comment}</td>
+    <td>${i.mylist}</td>
+    <td>${i.views}</td>
+</tr>
+        `
+    }
+    data += `
+    </table>
+    `
+    admin_html("posttest", data, res);
+}
+
 function login(res) {
     let data = `
   <form method="post" action="/admin/login">
@@ -194,5 +245,8 @@ router.get("/logout", (req, res) => {
 });
 router.get("/member", (req, res) => {
     check_login(member(res), req, res);
+});
+router.get("/post", (req, res) => {
+    check_login(post(res), req, res);
 });
 module.exports = router;
