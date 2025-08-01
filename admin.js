@@ -156,6 +156,7 @@ async function post(res) {
 <tr>
     <td>게시물 유형</td>
     <td>게시물 번호</td>
+    <td>작성자</td>
     <td>제목</td>
     <td>내용</td>
     <td>사진</td>
@@ -169,17 +170,55 @@ async function post(res) {
 </tr>
   `;
     // const test = await knex.select("*").from('talk').union(function () { this.select('think_num as id', 'writer_id', 'header', 'subject', 'reported', 'timestamp', 'like', 'quote', 'comment', 'mylist', 'views').from('think') });
-    const [tmp1, tmp2] = await Promise.all([knex("talk").select("*"), knex("think").select("*")]);
-    tmp3 = [...tmp1, ...tmp2];
-    tmp3.sort((a, b) => {
-        return new Date(a.timestamp) - new Date(b.timestamp);
-    });
-    for (i of tmp3) {
+    // const [tmp1, tmp2] = await Promise.all([knex("talk").select("*"), knex("think").select("*")]);
+    // tmp3 = [...tmp1, ...tmp2];
+    // tmp3.sort((a, b) => {
+    //     return new Date(a.timestamp) - new Date(b.timestamp);
+    // });
+    const combinedData = await knex
+        .select([
+            'timestamp',
+            'talk_num',
+            knex.raw('NULL AS think_num'), // Alias NULL for think_num in the 'talk' selection
+            'header',
+            'writer_id',
+            'subject',
+            'quote',
+            'photo',
+            'comment',
+            'like', // 'like' is a reserved keyword, so it's often quoted
+            'quote_num',
+            'views',
+            'mylist',
+        ])
+        .from('talk')
+        .unionAll([
+            knex
+                .select([
+                    'timestamp',
+                    knex.raw('NULL AS talk_num'), // Alias NULL for talk_num in the 'think' selection
+                    'think_num',
+                    'header',
+                    'writer_id',
+                    'subject',
+                    'quote',
+                    'photo',
+                    'comment',
+                    'like', // 'like' is a reserved keyword, so it's often quoted
+                    'quote_num',
+                    'views',
+                    'mylist',
+                ])
+                .from('think'),
+        ])
+        .orderBy('timestamp', 'asc');
+    for (i of combinedData) {
         console.log(i);
         data += `
         <tr>
     <td>${i.talk_num ? "jam-talk" : "jin-talk"}</td>
     <td>${i.talk_num || i.think_num}</td>
+    <td>${i.writer_id}</td>
     <td>${i.header}</td>
     <td>${i.subject}</td>
     <td>${i.photo}</td>
