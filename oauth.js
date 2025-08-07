@@ -178,7 +178,7 @@ router.put("/signup", async (req, res) => {
         email: req.body.email
       }
     );
-    const token = jwt.sign({ email: req.body.email, id, }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+    const token = jwt.sign({ email: req.body.email, sub: id }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
     await trx("user").update({ our_jwt: token }).where("id", id);
     await trx("profile").insert({ id: id, user_id: req.body.user_id, nickname: req.body.nickname });
     await trx.commit();
@@ -218,7 +218,7 @@ router.post("/check_age", (req, res) => {
   return res.status(200).json({ checkage });
 })
 
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   console.log(req.headers.authorization);
   let tkn = req.headers.authorization.split("Bearer ")[1];
   let decodetoken = jwt.decode(tkn);
@@ -321,6 +321,10 @@ router.post("/login", (req, res) => {
             res.json(err);
           });
       });
+  } else if (iss == "jamdeeptalk.com") {
+    const token = jwt.sign({ email: decodetoken.email, sub: decodetoken.sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+    await knex("user").update({ our_jwt: token }).where("id", decodetoken.sub)
+    res.json({ token });
   }
 });
 
@@ -376,7 +380,7 @@ router.get("/remain_people", async (req, res) => {
 });
 
 router.get("/jwttest", async (req, res) => {
-  const token = jwt.sign({ email: "bbasung@kakao.com", id: 1, }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+  const token = jwt.sign({ email: "bbasung@kakao.com", sub: 1, }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
   res.json({ token });
 });
 
