@@ -178,10 +178,12 @@ router.put("/signup", async (req, res) => {
         email: req.body.email
       }
     );
+    const token = jwt.sign({ email: req.body.email, id, }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+    await trx("user").update({ our_jwt: token }).where("id", id);
     await trx("profile").insert({ id: id, user_id: req.body.user_id, nickname: req.body.nickname });
     await trx.commit();
     console.log("complete");
-    res.status(200).json({ success: 1 });
+    res.status(200).json({ success: 1, token });
   } catch (err) {
     await trx.rollback();
     console.error(err);
@@ -371,6 +373,11 @@ router.get("/remain_people", async (req, res) => {
   test.max_member = MEMBER_COUNT;
   console.log(test);
   res.json(test);
+});
+
+router.get("/jwttest", async (req, res) => {
+  const token = jwt.sign({ email: "bbasung@kakao.com", id: 1, }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+  res.json({ token });
 });
 
 module.exports = router;
