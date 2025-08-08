@@ -8,6 +8,7 @@ const qs = require("querystring");
 const fs = require('fs');
 const mailer = require("nodemailer");
 const convert_our_id = require('./general.js').convert_our_id;
+const tmp_convert_our_id = require('./general.js').tmp_convert_our_id;
 const MEMBER_COUNT = 85;
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -178,10 +179,12 @@ router.put("/signup", async (req, res) => {
         email: req.body.email
       }
     );
+    const token = jwt.sign({ email: req.body.email, sub: id }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+    await trx("user").update({ our_jwt: token }).where("id", id);
     await trx("profile").insert({ id: id, user_id: req.body.user_id, nickname: req.body.nickname });
     await trx.commit();
     console.log("complete");
-    res.status(200).json({ success: 1 });
+    res.status(200).json({ success: 1, token });
   } catch (err) {
     await trx.rollback();
     console.error(err);
@@ -216,7 +219,7 @@ router.post("/check_age", (req, res) => {
   return res.status(200).json({ checkage });
 })
 
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   console.log(req.headers.authorization);
   let tkn = req.headers.authorization.split("Bearer ")[1];
   let decodetoken = jwt.decode(tkn);
@@ -319,6 +322,10 @@ router.post("/login", (req, res) => {
             res.json(err);
           });
       });
+  } else if (iss == "jamdeeptalk.com") {
+    const token = jwt.sign({ email: decodetoken.email, sub: decodetoken.sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+    await knex("user").update({ our_jwt: token }).where("id", decodetoken.sub)
+    res.json({ token });
   }
 });
 
@@ -371,6 +378,22 @@ router.get("/remain_people", async (req, res) => {
   test.max_member = MEMBER_COUNT;
   console.log(test);
   res.json(test);
+});
+
+router.get("/jwttest", async (req, res) => {
+  const token = jwt.sign({ email: "bbasung@kakao.com", sub: 1, }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+  res.json({ token });
+});
+
+router.get("/bearertest", async (req, res) => {
+  const ourid = await tmp_convert_our_id(req.headers.authorization);
+  if (ourid.code != undefined) {
+    const { httpcode, ...rest } = ourid;
+    console.log(httpcode);
+    console.log(rest);
+    return res.status(httpcode).json(rest);
+  }
+  res.json({ ourid });
 });
 
 module.exports = router;

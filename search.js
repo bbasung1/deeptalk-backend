@@ -8,7 +8,7 @@ router.use(express.urlencoded({ extended: true }));
 
 router.post("/", async (req, res) => {
     let user_id = req.body.id;
-    let id = await defind_id(user_id);
+    let id = await defind_id(user_id, res);
     if (req.body.type == "talk") {
         const talk = await knex('talk')
             .whereNotIn('writer_id', function () {
