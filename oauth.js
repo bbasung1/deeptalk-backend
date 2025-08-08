@@ -8,6 +8,7 @@ const qs = require("querystring");
 const fs = require('fs');
 const mailer = require("nodemailer");
 const convert_our_id = require('./general.js').convert_our_id;
+const tmp_convert_our_id = require('./general.js').tmp_convert_our_id;
 const MEMBER_COUNT = 85;
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -382,6 +383,17 @@ router.get("/remain_people", async (req, res) => {
 router.get("/jwttest", async (req, res) => {
   const token = jwt.sign({ email: "bbasung@kakao.com", sub: 1, }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
   res.json({ token });
+});
+
+router.get("/bearertest", async (req, res) => {
+  const ourid = await tmp_convert_our_id(req.headers.authorization);
+  if (ourid.code != undefined) {
+    const { httpcode, ...rest } = ourid;
+    console.log(httpcode);
+    console.log(rest);
+    return res.status(httpcode).json(rest);
+  }
+  res.json({ ourid });
 });
 
 module.exports = router;
