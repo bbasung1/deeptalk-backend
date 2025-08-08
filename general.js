@@ -48,7 +48,7 @@ async function define_id(test_id, res) {
     let id = null;
     console.log(test_id);
     if (test_id != undefined) {
-        id = await convert_our_id(test_id);
+        id = await tmp_convert_our_id(test_id);
         if (id.code != undefined) {
             const { httpcode, ...rest } = id;
             console.log(httpcode);
