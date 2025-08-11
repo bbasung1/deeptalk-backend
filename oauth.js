@@ -7,7 +7,7 @@ const knex = require("./knex.js");
 const qs = require("querystring");
 const fs = require('fs');
 const mailer = require("nodemailer");
-const convert_our_id = require('./general.js').convert_our_id;
+const define_id = require('./general.js').define_id;
 const tmp_convert_our_id = require('./general.js').tmp_convert_our_id;
 const MEMBER_COUNT = 85;
 router.use(express.json());
@@ -193,7 +193,7 @@ router.put("/signup", async (req, res) => {
 });
 
 router.delete("/account", async (req, res) => {
-  ourid = await convert_our_id(req.body.id);
+  ourid = await define_id(req.headers.authorization, res);
   const reason = req.body.reason;
   const time = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   try {

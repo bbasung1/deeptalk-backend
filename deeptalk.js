@@ -35,6 +35,7 @@ app.use("/search", require("./search.js"));
 app.use("/write", require("./write.js"));
 app.use("/useractivity", require("./useractivity.js"));
 app.use("/admin", require("./admin.js"));
+app.use("/home", require("./home.js"));
 
 app.use(cors());
 
