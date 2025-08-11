@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { convert_our_id } = require("./general.js");
+const convert_our_id = require('./general.js').define_id;
 
 router.use(express.json());
 
@@ -17,7 +17,7 @@ router.post("/", async (req, res) => {
     }
 
     try {
-        const writer_id = await convert_our_id(user_id);  // 내부 ID로 변환
+        const writer_id = await convert_our_id(req.headers.authorization, res);  // 내부 ID로 변환
         // profile.user_id를 user.id로로
 
         if (!writer_id) {

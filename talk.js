@@ -1,16 +1,16 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const convert_our_id = require('./general.js').convert_our_id;
+const convert_our_id = require('./general.js').define_id;
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
-router.post("/", async (req, res) => {
-    let user_id = req.body.id;
+router.get("/", async (req, res) => {
+    let user_id = req.headers.authorization;
     let id = null;
     console.log(user_id);
     if (user_id != undefined) {
-        id = await convert_our_id(user_id);
+        id = await convert_our_id(user_id, res);
     };
     try {
         const talk = await knex('talk')
