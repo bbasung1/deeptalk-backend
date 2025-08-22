@@ -40,8 +40,12 @@ router.delete("/:id", async (req, res) => {
     if (id != writer_id.writer_id) {
         return res.status(403).json({ "msg": "삭제 권한이 없습니다", "code": "4101" })
     }
-    const test = await knex("talk").where("talk_num", req.params.id).delete();
-    res.json(test);
+    try {
+        const test = await knex("talk").where("talk_num", req.params.id).delete();
+        return res.json({ "success": 1 })
+    } catch {
+        return res.status(500).json({ "success": 0 });
+    }
 })
 
 module.exports = router;
