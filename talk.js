@@ -31,4 +31,17 @@ router.get("/:id", async (req, res) => {
     }
 });
 
+router.delete("/:id", async (req, res) => {
+    const id_token = req.headers.authorization;
+    const id = await define_id(id_token, res);
+    console.log(id);
+    const [writer_id] = await knex("talk").select("writer_id").where("talk_num", req.params.id);
+    console.log(writer_id.writer_id);
+    if (id != writer_id.writer_id) {
+        return res.status(403).json({ "msg": "삭제 권한이 없습니다", "code": "4101" })
+    }
+    const test = await knex("talk").where("talk_num", req.params.id).delete();
+    res.json(test);
+})
+
 module.exports = router;
