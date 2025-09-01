@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
+const define_id = require("./general.js").define_id;
 
 const knex = require("./knex.js");
 router.use(express.json());
@@ -33,25 +34,25 @@ router.post("/alram", (req, res) => {
     }
 })
 
-router.put("/id",(req,res)=>{
+router.put("/id", (req, res) => {
     knex("profile")
-    .where("user_id",req.body.original_id)
-    .update({user_id:req.body.change_id})
-    .then(()=>{
-        res.status(200).json({success:1})
-    })
-    .catch((err)=>{
-        let errdata={
-            success:0,
-            errcode: err.errno,
-            errmsg:"기타 오류가 발생했습니다."
-        }
-        if(err.errno==1062){
-            errdata.errmsg="아이디가 중복됩니다."
-        }
-        console.error(err)
-        res.json(errdata)
-    })
+        .where("user_id", req.body.original_id)
+        .update({ user_id: req.body.change_id })
+        .then(() => {
+            res.status(200).json({ success: 1 })
+        })
+        .catch((err) => {
+            let errdata = {
+                success: 0,
+                errcode: err.errno,
+                errmsg: "기타 오류가 발생했습니다."
+            }
+            if (err.errno == 1062) {
+                errdata.errmsg = "아이디가 중복됩니다."
+            }
+            console.error(err)
+            res.json(errdata)
+        })
 });
 
 router.post("/id_check", async (req, res) => {
@@ -227,7 +228,22 @@ router.post("/theme", async (req, res) => {
     }
 });
 
-
+router.put("/mail", async (req, res) => {
+    const id = await define_id(req.headers.authorization, res);
+    console.log(id);
+    if (id == null) {
+        return res.status(403).json({
+            success: 0,
+            msg: "변경 권한이 없습니다",
+        })
+    }
+    try {
+        const tmp = await knex("user").update({ email: req.body.mail }).where("id", id);
+        return res.json({ success: 1 });
+    } catch {
+        return res.status(500).json({ success: 0, msg: "메일 변경 실패" })
+    }
+})
 
 module.exports = router;
 
