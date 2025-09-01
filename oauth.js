@@ -342,6 +342,11 @@ router.post("/cancel_delete", async (req, res) => {
 
 router.post("/mail_check", async (req, res) => {
   const mail_addr = req.body.mail_addr;
+  const [check_mail] = await knex("user").select("id").where("email", mail_addr);
+  console.log(check_mail);
+  if (check_mail != null) {
+    return res.status(401).json({ msg: "이미 메일값이 존재합니다" });
+  }
   const authnum = Math.random().toString().substr(2, 6);
   const transporter = mailer.createTransport({
     service: 'gmail',
