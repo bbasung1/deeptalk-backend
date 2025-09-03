@@ -146,49 +146,87 @@ router.post("/nickname", async (req, res) => {
 });
 
 
-// mute 와 block 구현
-router.post("/block", (req, res) => handleBlockAction(req, res, "block"));
-router.post("/mute", (req, res) => handleBlockAction(req, res, "mute"));
-
 const TYPE_BLOCK = 0;
 const TYPE_MUTE = 1;
 const TYPE_REPORT = 2;
 
 const typeMap = {
-    "block": TYPE_BLOCK,
-    "mute": TYPE_MUTE,
-    "report": TYPE_REPORT
+  "block": TYPE_BLOCK,
+  "mute": TYPE_MUTE,
+  "report": TYPE_REPORT,
 };
 
+// block 등록
+router.post("/block", (req, res) => handleBlockAction(req, res, "block"));
+// mute 등록
+router.post("/mute", (req, res) => handleBlockAction(req, res, "mute"));
+
 async function handleBlockAction(req, res, actionType) {
-    const { user_id, target_id } = req.body;
+  const ourid = await define_id(req.headers.authorization, res);
+  if (!ourid) return; // 인증 실패 시 종료
 
-    if (!user_id || !target_id) {
-        return res.status(400).json({ success: false, message: "user_id와 target_id가 필요합니다." });
-    }
+  const { target_id } = req.body; // 이제 body에는 target_id만 있으면 됨
 
-    if (!(actionType in typeMap)) {
-        return res.status(400).json({ success: false, message: "지원하지 않는 타입입니다." });
-    }
+  if (!target_id) {
+    return res.status(400).json({ success: false, message: "target_id가 필요합니다." });
+  }
 
-    try {
-        await knex("block_list").insert({
-            user_id: user_id,
-            blocked_user_id: target_id,
-            type: typeMap[actionType]
-        });
+  if (!(actionType in typeMap)) {
+    return res.status(400).json({ success: false, message: "지원하지 않는 타입입니다." });
+  }
 
-        res.json({ success: true, message: `${actionType} 등록 완료` });
-    } catch (err) {
-        if (err.errno === 1062) {
-            res.status(409).json({ success: false, message: `이미 ${actionType}된 사용자입니다.` });
-        } else {
-            console.error(err);
-            res.status(500).json({ success: false, message: "서버 오류" });
+  try {
+    await knex.transaction(async (trx) => {
+      // block_list에 등록
+      await trx("block_list").insert({
+        user_id: ourid, // JWT에서 뽑은 값
+        blocked_user_id: target_id,
+        type: typeMap[actionType],
+      });
+
+      // block일 경우 follow 관계를 backup + 삭제
+      if (actionType === "block") {
+        const isUserFollowTarget = await trx("follow")
+          .where({ user_id: ourid, friend_id: target_id })
+          .first();
+        const isTargetFollowUser = await trx("follow")
+          .where({ user_id: target_id, friend_id: ourid })
+          .first();
+
+        let relation = null;
+        if (isUserFollowTarget && isTargetFollowUser) relation = 2;
+        else if (isUserFollowTarget) relation = 0;
+        else if (isTargetFollowUser) relation = 1;
+
+        if (relation !== null) {
+          // backup 테이블에 기록
+          await trx("follow_backup").insert({
+            user_id1: ourid,
+            user_id2: target_id,
+            relation,
+          });
+
+          // follow 테이블에서 삭제
+          await trx("follow")
+            .whereIn(["user_id", "friend_id"], [
+              [ourid, target_id],
+              [target_id, ourid],
+            ])
+            .del();
         }
-    }
-}
+      }
+    });
 
+    return res.json({ success: true, message: `${actionType} 등록 완료` });
+  } catch (err) {
+    if (err.errno === 1062) {
+      return res.status(409).json({ success: false, message: `이미 ${actionType}된 사용자입니다.` });
+    } else {
+      console.error(err);
+      return res.status(500).json({ success: false, message: "서버 오류" });
+    }
+  }
+}
 
 // 테마 설정
 router.post("/theme", async (req, res) => {
