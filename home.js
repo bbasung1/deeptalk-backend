@@ -6,21 +6,10 @@ const { define_id } = require("./general.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
-// ===== Authorization 헤더에서 우리 id 뽑기 =====
-async function getOurIdFromAuth(authHeader, res) {
-  const ourid = await define_id(authHeader, res);
-  if (res.headersSent) return null; // define_id가 에러 응답했으면 null 반환
-  if (!ourid) {
-    res.status(401).json({ error: "Unauthorized" });
-    return null;
-  }
-  return ourid; // user.id (= profile.id)
-}
-
 // /Jam-Talk: 차단 사용자 글 제외
 router.get("/Jam-Talk", async (req, res) => {
   try {
-    const ourid = await getOurIdFromAuth(req.headers.authorization, res);
+    const ourid = await define_id(req.headers.authorization, res);
     if (!ourid) return; // 인증 실패 시 종료
 
     const talk = await knex("talk")
@@ -28,6 +17,12 @@ router.get("/Jam-Talk", async (req, res) => {
         this.select("blocked_user_id")
           .from("block_list")
           .where("user_id", ourid);
+      })
+      .whereNotIn("writer_id", function () {
+        this.select("user_id")
+          .from("block_list")
+          .where("blocked_user_id", ourid)
+          .andWhere("type", 0);
       })
       .select("*");
 
@@ -41,14 +36,20 @@ router.get("/Jam-Talk", async (req, res) => {
 // /Jin-Talk: 차단 사용자 글 제외
 router.get("/Jin-Talk", async (req, res) => {
   try {
-    const ourid = await getOurIdFromAuth(req.headers.authorization, res);
-    if (!ourid) return;
+    const ourid = await define_id(req.headers.authorization, res);
+    if (!ourid) return; // 인증 실패 시 종료
 
     const think = await knex("think")
       .whereNotIn("writer_id", function () {
-        this.select("blocked_user_id") // ← 통일
+        this.select("blocked_user_id")
           .from("block_list")
           .where("user_id", ourid);
+      })
+      .whereNotIn("writer_id", function () {
+        this.select("user_id")
+          .from("block_list")
+          .where("blocked_user_id", ourid)
+          .andWhere("type", 0);
       })
       .select("*");
 
