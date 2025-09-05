@@ -376,5 +376,15 @@ router.post("/block/list", async (req, res) => {
   return res.json(content)
 });
 
+router.post("/mute/list", async (req, res) => {
+  const ourid = await define_id(req.headers.authorization, res);
+  if (!ourid) {
+    return res.status(400).json({ success: 0, msg: "id 인식 실패" });
+  }
+  const content = await knex("block_list").select("blocked_user_id").where({ user_id: ourid, type: TYPE_MUTE });
+  console.log(content);
+  return res.json(content)
+});
+
 module.exports = router;
 
