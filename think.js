@@ -13,7 +13,7 @@ router.get("/:id", async (req, res) => {
         id = await define_id(user_id, res);
     };
     try {
-        const [think] = await knex('think')
+        [think] = await knex('think')
             .whereNotIn('writer_id', function () {
                 this.select('blocked_user_id')
                     .from('block_list')
@@ -24,6 +24,8 @@ router.get("/:id", async (req, res) => {
         if (think == undefined) {
             return res.json({ msg: "없거나 비공개인 포스트 입니다" })
         }
+        think.views = think.views + 1;
+        await knex("think").where("think_num", req.params.id).update({ views: think.views });
         return res.json(think);
     } catch (err) {
         console.error(err);
