@@ -38,6 +38,8 @@ app.use("/admin", require("./admin.js"));
 app.use("/home", require("./home.js"));
 app.use("/like", require("./like.js"));
 app.use("/mylist", require("./bookmark.js"));
+app.use("/report", require("./report.js"));
+
 
 app.use(cors());
 
