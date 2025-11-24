@@ -32,7 +32,7 @@ router.get("/", async (req, res) => {
         ((${rawEngagementScoreSQL}) * ${weightEngagement}) * (${rawFreshnessScoreSQL})
     `;
 
-    const posts = await knex('talk')
+    let posts = await knex('talk')
         // select 내에서 knex.raw()를 사용하여 계산된 컬럼에 별칭(Alias)을 지정합니다.
         .select(
             '*',
@@ -41,7 +41,13 @@ router.get("/", async (req, res) => {
             knex.raw(`${rawFinalScoreSQL} as final_score`)
         )
         .orderBy('final_score', 'desc');
-
+    for (i of posts) {
+        console.log(i);
+        delete i["engagement_score"];
+        delete i["freshness_score"];
+        delete i["final_score"];
+        console.log(i);
+    }
     res.json(posts);
 
 });
