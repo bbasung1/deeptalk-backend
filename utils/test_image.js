@@ -3,7 +3,7 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const upload = multer();
-const { saveImage, generateFilename } = require("./utils/imageSaver");
+const { saveImage, generateFilename } = require("./imageSaver");
 
 router.post("/image-save", upload.single("file"), async (req, res) => {
     try {

@@ -3,7 +3,8 @@ const fs = require("fs");
 const path = require("path");
 
 // 저장 폴더 기본값
-const DEFAULT_DIR = path.join(__dirname, "..", "uploads");
+// const DEFAULT_DIR = path.join(__dirname, "..", "uploads");
+const DEFAULT_DIR = process.env.FILE_DIR;
 
 /**
  * Buffer 또는 base64 이미지 데이터를 로컬에 저장하는 유틸 함수
