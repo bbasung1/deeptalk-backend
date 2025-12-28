@@ -111,7 +111,7 @@ router.post("/nickname/register", async (req, res) => {
     res.status(200).json({ message: "닉네임 업데이트 성공" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "닉네임 업데이트 실패패" });
+    res.status(500).json({ message: "닉네임 업데이트 실패" });
   }
 });
 
