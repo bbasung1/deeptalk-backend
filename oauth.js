@@ -330,7 +330,7 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/cancel_delete", async (req, res) => {
-  const ourid = await convert_our_id(req.body.id);
+  const ourid = await tmp_convert_our_id(req.headers.authorization);
   const reason_delete = await knex('delete_reason').where("id", ourid).del();
   knex('user').where("id", ourid).update({ deletetime: null, delete_reason: null }).then(() => {
     res.json({ success: 1 });
