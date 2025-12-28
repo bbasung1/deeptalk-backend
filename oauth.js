@@ -325,7 +325,7 @@ router.post("/login", async (req, res) => {
   } else if (iss == "jamdeeptalk.com") {
     const token = jwt.sign({ email: decodetoken.email, sub: decodetoken.sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
     await knex("user").update({ our_jwt: token }).where("id", decodetoken.sub)
-    res.json({ token });
+    res.json({ id_token:token });
   }
 });
 
