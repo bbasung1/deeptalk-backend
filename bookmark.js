@@ -44,8 +44,11 @@ router.get("/list", async (req, res) => {
     if (!ourid) {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }
-    const pt_type_bool = req.query.type == "Jam-Talk" ? 0 : 1
-    const pt_type_name = req.query.type == "Jam-Talk" ? "talk" : "think"
+    // const pt_type_bool = req.query.type == "Jam-Talk" ? 0 : 1
+    // const pt_type_name = req.query.type == "Jam-Talk" ? "talk" : "think"
+    //위 두 줄은 query를 Jam-Talk/Jin-Talk으로 바꿀 경우 활성화 할것
+    const pt_type_bool = req.query.type
+    const pt_type_name = req.query.type == 0 ? "talk" : "think"
     const num_name = pt_type_name + "_num"
     const list = await knex(pt_type_name).whereIn(num_name, function () {
         this.select("post_id").from("bookmark").where({ type: pt_type_bool, user_id: ourid });
