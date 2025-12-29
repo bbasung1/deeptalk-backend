@@ -325,12 +325,12 @@ router.post("/login", async (req, res) => {
   } else if (iss == "jamdeeptalk.com") {
     const token = jwt.sign({ email: decodetoken.email, sub: decodetoken.sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
     await knex("user").update({ our_jwt: token }).where("id", decodetoken.sub)
-    res.json({ token });
+    res.json({ id_token:token });
   }
 });
 
 router.post("/cancel_delete", async (req, res) => {
-  const ourid = await convert_our_id(req.body.id);
+  const ourid = await tmp_convert_our_id(req.headers.authorization);
   const reason_delete = await knex('delete_reason').where("id", ourid).del();
   knex('user').where("id", ourid).update({ deletetime: null, delete_reason: null }).then(() => {
     res.json({ success: 1 });

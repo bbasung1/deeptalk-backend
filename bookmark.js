@@ -10,7 +10,7 @@ router.post("/:id", async (req, res) => {
     if (!ourid) {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }
-    const [dupcheck] = await knex("post_like").select("*").where({ type: req.body.type, user_id: req.params.id })
+    const [dupcheck] = await knex("bookmark").select("*").where({ type: req.body.type, user_id: ourid, post_id: req.params.id })
     console.log(dupcheck);
     const trx = await knex.transaction();
     const type = req.body.type == 0 ? "talk" : "think";
@@ -19,10 +19,10 @@ router.post("/:id", async (req, res) => {
     console.log(dupcheck);
     if (dupcheck != undefined) {
         try {
-            await trx("post_like").where({ type: req.body.type, post_id: req.params.id }).del();
-            await trx(type).update({ like: brf_bookmark.like - 1 }).where(num_name, req.params.id);
+            await trx("bookmark").where({ type: req.body.type, post_id: req.params.id }).del();
+            await trx(type).update({ mylist: brf_bookmark.mylist - 1 }).where(num_name, req.params.id);
             await trx.commit();
-            return res.json({ success: 1, msg: "좋아요 해제 완료" });
+            return res.json({ success: 1, msg: "북마크 해제 완료" });
         } catch (err) {
             console.error(err);
             return res.json({ success: 0 });
@@ -30,13 +30,27 @@ router.post("/:id", async (req, res) => {
     }
     try {
         await trx("bookmark").insert({ user_id: ourid, type: req.body.type, post_id: req.params.id });
-        await trx(type).update({ like: brf_bookmark.like + 1 }).where(num_name, req.params.id);
+        await trx(type).update({ mylist: brf_bookmark.mylist + 1 }).where(num_name, req.params.id);
         await trx.commit();
-        return res.json({ success: 1, msg: "좋아요 완료" });
+        return res.json({ success: 1, msg: "북마크 완료" });
     } catch (err) {
         console.error(err);
         return res.json({ success: 0 });
     }
+});
+
+router.get("/list", async (req, res) => {
+    const ourid = await define_id(req.headers.authorization, res);
+    if (!ourid) {
+        return res.status(400).json({ success: 0, msg: "id 인식 실패" });
+    }
+    const pt_type_bool = req.query.type == "Jam-Talk" ? 0 : 1
+    const pt_type_name = req.query.type == "Jam-Talk" ? "talk" : "think"
+    const num_name = pt_type_name + "_num"
+    const list = await knex(pt_type_name).whereIn(num_name, function () {
+        this.select("post_id").from("bookmark").where({ type: pt_type_bool, user_id: ourid });
+    });
+    return res.json(list);
 });
 
 module.exports = router;
