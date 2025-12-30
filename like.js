@@ -20,7 +20,7 @@ router.post("/:id", async (req, res) => {
     console.log(dupcheck);
     if (dupcheck != undefined) {
         try {
-            await trx("post_like").where({ type: req.body.type, post_id: req.params.id }).del();
+            await trx("post_like").where({ type: req.body.type, post_id: req.params.id, user_id: ourid }).del();
             await trx(type).update({ like: brf_like.like - 1 }).where(num_name, req.params.id);
             await trx.commit();
             return res.json({ success: 1, msg: "좋아요 해제 완료" });
