@@ -67,18 +67,18 @@ cron.schedule('0 0 * * *', async () => {
         try {
             await Promise.all([
                 trx("talk").whereIn("talk_num", function () {
-                    this.select("post_id").from("post_like").where({ type: 0, user_id: 1 });
+                    this.select("post_id").from("post_like").where({ type: 0, user_id: ourid });
                 }).decrement("like", 1),
 
                 trx("think").whereIn("think_num", function () {
-                    this.select("post_id").from("post_like").where({ type: 1, user_id: 1 });
+                    this.select("post_id").from("post_like").where({ type: 1, user_id: ourid });
                 }).decrement("like", 1),
                 trx("talk").whereIn("talk_num", function () {
-                    this.select("post_id").from("bookmark").where({ type: 0, user_id: 1 });
+                    this.select("post_id").from("bookmark").where({ type: 0, user_id: ourid });
                 }).decrement("like", 1),
 
                 trx("think").whereIn("think_num", function () {
-                    this.select("post_id").from("bookmark").where({ type: 1, user_id: 1 });
+                    this.select("post_id").from("bookmark").where({ type: 1, user_id: ourid });
                 }).decrement("like", 1)
             ]);
             await Promise.all([
