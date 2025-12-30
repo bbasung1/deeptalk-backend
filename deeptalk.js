@@ -41,7 +41,7 @@ app.use("/mylist", require("./bookmark.js"));
 app.use("/follow", require("./follow.js"));
 app.use("/report", require("./report.js"));
 // app.use("/test", require("./test.js"));
-app.use("/test", require("./utils/test_image.js"));
+app.use("/test", require("./test.js"));
 app.use("/files", express.static(process.env.FILE_DIR));
 
 app.use(cors());
@@ -66,11 +66,29 @@ cron.schedule('0 0 * * *', async () => {
         const trx = await knex.transaction();
         try {
             await Promise.all([
+                trx("talk").whereIn("talk_num", function () {
+                    this.select("post_id").from("post_like").where({ type: 0, user_id: 1 });
+                }).decrement("like", 1),
+
+                trx("think").whereIn("think_num", function () {
+                    this.select("post_id").from("post_like").where({ type: 1, user_id: 1 });
+                }).decrement("like", 1),
+                trx("talk").whereIn("talk_num", function () {
+                    this.select("post_id").from("bookmark").where({ type: 0, user_id: 1 });
+                }).decrement("like", 1),
+
+                trx("think").whereIn("think_num", function () {
+                    this.select("post_id").from("bookmark").where({ type: 1, user_id: 1 });
+                }).decrement("like", 1)
+            ]);
+            await Promise.all([
                 trx("block_list").where("user_id", ourid).del(),
                 trx("comment").where("user_id", ourid).del(),
                 trx("talk").where("writer_id", ourid).del(),
                 trx("think").where("writer_id", ourid).del(),
-                trx("talk").where("writer_id", ourid).del(),
+                trx("follow").where("user_id", ourid).del(),
+                trx("post_like").where("user_id", ourid).del(),
+                trx("bookmark").where("user_id", ourid).del(),
             ]);
             await trx("profile").where("id", ourid).del();
             await trx("delete_reason").insert({ id: ourid, delete_reason: reason });

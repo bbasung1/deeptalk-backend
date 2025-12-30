@@ -6,49 +6,23 @@ router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
 router.get("/", async (req, res) => {
-    const halfLifeHours = 24;
-    const weightEngagement = 1.0;
-    const commentsWeight = 2.0;
-    const retweetsWeight = 1.5;
-    const likesWeight = 1.2;
-    const bookmarksWeight = 1.0;
-    const viewsWeight = 1.0;
+    const trx = await knex.transaction();
 
-    const rawEngagementScoreSQL = `
-        LOG(1 + 
-            (comment * ${commentsWeight}) + 
-            (quote_num * ${retweetsWeight}) + 
-            (\`like\` * ${likesWeight}) + 
-            (mylist * ${bookmarksWeight}) +
-            (\`views\` * ${viewsWeight})
-        )
-    `;
+    try {
+        await Promise.all([
+            trx("talk").whereIn("talk_num", function () {
+                this.select("post_id").from("post_like").where({ type: 0, user_id: 1 });
+            }).decrement("like", 1),
 
-    const rawFreshnessScoreSQL = `
-        POW(2, - (TIMESTAMPDIFF(HOUR, timestamp, NOW()) / ${halfLifeHours}))
-    `;
+            trx("think").whereIn("think_num", function () {
+                this.select("post_id").from("post_like").where({ type: 1, user_id: 1 });
+            }).decrement("like", 1)
+        ]);
 
-    const rawFinalScoreSQL = `
-        ((${rawEngagementScoreSQL}) * ${weightEngagement}) * (${rawFreshnessScoreSQL})
-    `;
-
-    let posts = await knex('talk')
-        // select 내에서 knex.raw()를 사용하여 계산된 컬럼에 별칭(Alias)을 지정합니다.
-        .select(
-            '*',
-            knex.raw(`${rawEngagementScoreSQL} as engagement_score`),
-            knex.raw(`${rawFreshnessScoreSQL} as freshness_score`),
-            knex.raw(`${rawFinalScoreSQL} as final_score`)
-        )
-        .orderBy('final_score', 'desc');
-    for (i of posts) {
-        console.log(i);
-        delete i["engagement_score"];
-        delete i["freshness_score"];
-        delete i["final_score"];
-        console.log(i);
+        await trx.commit();
+    } catch (e) {
+        await trx.rollback();
     }
-    res.json(posts);
 
 });
 
