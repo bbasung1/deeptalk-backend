@@ -6,18 +6,20 @@ const jwt = require("jsonwebtoken");
 const knex = require("./knex.js");
 const qs = require("querystring");
 const fs = require('fs');
-const convert_our_id = require('./general.js').convert_our_id;
-
+const mailer = require("nodemailer");
+const define_id = require('./general.js').define_id;
+const tmp_convert_our_id = require('./general.js').tmp_convert_our_id;
+const MEMBER_COUNT = 85;
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 dotenv.config();
 
-router.get("/test1/kakao", async (req, res) => {
-  const trx = await knex.transaction();
-  test = await trx("user").insert({ twitter_id: 123123, email: "bbasung@test.com" })
-  console.log(test);
-  await trx("profile").insert({ id: test, user_id: "test" });
-  await trx.commit();
+router.get("/test1", async (req, res) => {
+  test = await knex("user").whereNull("deletetime").count({ "test": "*" });
+  if (MEMBER_COUNT < test[0].test) {
+    return res.status(500).json({ success: 0, err_code: 5001, msg: "멤버가 최대치에 도달했습니다!" });
+  }
+  res.send(test[0]);
 });
 
 router.get("/test/kakao", (req, res) => {
@@ -142,7 +144,10 @@ router.put("/signup", async (req, res) => {
   let decodetoken = jwt.decode(tkn);
   let iss = decodetoken.iss;
   const trx = await knex.transaction();
-  // knex.transaction((trx) => {
+  const member = await knex("user").whereNull("deletetime").count({ "member": "*" });
+  if (MEMBER_COUNT < member[0].member) {
+    return res.status(500).json({ success: 0, err_code: 5001, msg: "멤버가 최대치에 도달했습니다!" });
+  }
   let kakaoid = null;
   let kakaoAccessCode = null;
   let kakaoRefreshCode = null;
@@ -174,10 +179,12 @@ router.put("/signup", async (req, res) => {
         email: req.body.email
       }
     );
+    const token = jwt.sign({ email: req.body.email, sub: id }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+    await trx("user").update({ our_jwt: token }).where("id", id);
     await trx("profile").insert({ id: id, user_id: req.body.user_id, nickname: req.body.nickname });
     await trx.commit();
     console.log("complete");
-    res.status(200).json({ success: 1 });
+    res.status(200).json({ success: 1, token });
   } catch (err) {
     await trx.rollback();
     console.error(err);
@@ -186,7 +193,7 @@ router.put("/signup", async (req, res) => {
 });
 
 router.delete("/account", async (req, res) => {
-  ourid = await convert_our_id(req.body.id);
+  ourid = await define_id(req.headers.authorization, res);
   const reason = req.body.reason;
   const time = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   try {
@@ -212,7 +219,7 @@ router.post("/check_age", (req, res) => {
   return res.status(200).json({ checkage });
 })
 
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   console.log(req.headers.authorization);
   let tkn = req.headers.authorization.split("Bearer ")[1];
   let decodetoken = jwt.decode(tkn);
@@ -221,7 +228,7 @@ router.post("/login", (req, res) => {
   let sub = decodetoken.sub;
   if (iss == "https://kauth.kakao.com") {
     knex
-      .select("kakao_access_code", "kakao_refresh_code", "kakao_id_token", "id","deletetime")
+      .select("kakao_access_code", "kakao_refresh_code", "kakao_id_token", "id", "deletetime")
       .from("user")
       .where("kakao_id", sub)
       .then((tokendata) => {
@@ -250,10 +257,12 @@ router.post("/login", (req, res) => {
             if (senddata.refresh_token) {
               insertdata.kakao_refresh_code = senddata.refresh_token;
             }
-            senddata.willdelete=false;
-            if(tokendata[0].deletetime != null){
-              senddata.willdelete=true;
+            senddata.willdelete = false;
+            if (tokendata[0].deletetime != null) {
+              senddata.willdelete = true;
             }
+            delete senddata.token_type;
+            delete senddata.expires_in;
             knex("user")
               .where("kakao_id", sub)
               .update(insertdata)
@@ -268,7 +277,7 @@ router.post("/login", (req, res) => {
       });
   } else if (iss == "https://appleid.apple.com") {
     knex
-      .select("apple_access_code", "apple_refresh_code", "apple_id_token","deletetime")
+      .select("apple_access_code", "apple_refresh_code", "apple_id_token", "deletetime")
       .from("user")
       .where("apple_id", sub)
       .then((tokendata) => {
@@ -297,9 +306,9 @@ router.post("/login", (req, res) => {
             if (senddata.refresh_token) {
               insertdata.apple_refresh_code = senddata.refresh_token;
             }
-            senddata.willdelete=false;
-            if(tokendata[0].deletetime != null){
-              senddata.willdelete=true;
+            senddata.willdelete = false;
+            if (tokendata[0].deletetime != null) {
+              senddata.willdelete = true;
             }
             knex("user")
               .where("apple_id", sub)
@@ -313,17 +322,83 @@ router.post("/login", (req, res) => {
             res.json(err);
           });
       });
+  } else if (iss == "jamdeeptalk.com") {
+    const token = jwt.sign({ email: decodetoken.email, sub: decodetoken.sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+    await knex("user").update({ our_jwt: token }).where("id", decodetoken.sub)
+    res.json({ id_token:token });
   }
 });
 
-router.post("/cancel_delete",async(req,res)=>{
-  const ourid = await convert_our_id(req.body.id);
-  knex('user').where("id",ourid).update({deletetime:null,delete_reason:null}).then(()=>{
-    res.json({success:1});
-  }).catch((err)=>{
-    res.json({success:0,err: err});
+router.post("/cancel_delete", async (req, res) => {
+  const ourid = await tmp_convert_our_id(req.headers.authorization);
+  const reason_delete = await knex('delete_reason').where("id", ourid).del();
+  knex('user').where("id", ourid).update({ deletetime: null, delete_reason: null }).then(() => {
+    res.json({ success: 1 });
+  }).catch((err) => {
+    res.json({ success: 0, err: err });
   })
 
 })
+
+router.post("/mail_check", async (req, res) => {
+  const mail_addr = req.body.mail_addr;
+  const [check_mail] = await knex("user").select("id").where("email", mail_addr);
+  console.log(check_mail);
+  if (check_mail != null) {
+    return res.status(401).json({ msg: "이미 메일값이 존재합니다" });
+  }
+  const authnum = Math.random().toString().substr(2, 6);
+  const transporter = mailer.createTransport({
+    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    auth: {
+      user: "wbba1650@gmail.com",
+      pass: process.env.GOOGLE_MAIL_PASSWORD,
+    },
+  });
+  let mailOptions = transporter.sendMail({
+    from: "test",
+    to: mail_addr,
+    subject: '딥톡 인증번호 도착!',
+    text: `안녕하세요, 딥톡 운영자 진지입니다.\n
+    따뜻하면서도 안전한 공간, 딥톡에 함께해 주셔서 감사해요.\n\n
+    아래 인증번호를 입력해 주세요:\n[인증번호: ` + authnum + `]\n\n
+    인증번호는 10분 동안 유효해요.\n\n
+    딥톡 운영자 진지 드림`,
+  });
+  transporter.sendMail(mailOptions, function (error) {
+    if (error) {
+      console.log(error);
+    }
+    // console.log("Finish sending email : " + info.response);
+    res.json({ authnum: authnum });
+    transporter.close()
+  });
+});
+
+router.get("/remain_people", async (req, res) => {
+  let [test] = await knex("user").whereNull("deletetime").count({ "cur_member": "*" });
+  test.max_member = MEMBER_COUNT;
+  console.log(test);
+  res.json(test);
+});
+
+router.get("/jwttest", async (req, res) => {
+  const token = jwt.sign({ email: "bbasung@kakao.com", sub: 1, }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+  res.json({ token });
+});
+
+router.get("/bearertest", async (req, res) => {
+  const ourid = await tmp_convert_our_id(req.headers.authorization);
+  if (ourid.code != undefined) {
+    const { httpcode, ...rest } = ourid;
+    console.log(httpcode);
+    console.log(rest);
+    return res.status(httpcode).json(rest);
+  }
+  res.json({ ourid });
+});
 
 module.exports = router;

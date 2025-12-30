@@ -29,11 +29,22 @@ app.use("/oauth", require("./oauth.js"));
 app.use("/comment", require("./comment.js"));
 app.use("/profile", require("./profile.js"));
 app.use("/admin", require("./admin.js"));
-app.use("/talk", require("./talk.js"));
-app.use("/think", require("./think.js"));
+app.use("/jin-talk", require("./talk.js"));
+app.use("/jam-talk", require("./think.js"));
 app.use("/search", require("./search.js"));
 app.use("/write", require("./write.js"));
 app.use("/useractivity", require("./useractivity.js"));
+app.use("/admin", require("./admin.js"));
+app.use("/home", require("./home.js"));
+app.use("/like", require("./like.js"));
+app.use("/mylist", require("./bookmark.js"));
+app.use("/follow", require("./follow.js"));
+app.use("/report", require("./report.js"));
+// app.use("/test", require("./test.js"));
+app.use("/test", require("./utils/test_image.js"));
+app.use("/files", express.static(process.env.FILE_DIR));
+
+app.use(cors());
 
 if (!httpsmode) {
     app.listen(9300, () => { console.log("http server is running") });
@@ -45,7 +56,7 @@ if (!httpsmode) {
 
 cron.schedule('0 0 * * *', async () => {
     console.log("cron working");
-    const now=new Date();
+    const now = new Date();
     const userset = await knex('user').select('id', 'delete_reason').where('deletetime', '<=', now);
     console.log(userset);
     for (const user of userset) {
