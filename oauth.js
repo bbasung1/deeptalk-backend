@@ -114,7 +114,6 @@ router.post("/callback/apple", (req, res) => {
   let idtwk = jwt.decode(appleidtoken);
   let applesub = idtwk.sub;
   let applecode = req.body.code;
-  let ci = req.body.ci;
   axios
     .post(
       "https://appleid.apple.com/auth/token",
@@ -123,7 +122,7 @@ router.post("/callback/apple", (req, res) => {
         code: applecode,
         client_secret: createSignWithAppleSecret(),
         client_id: process.env.APPLE_CLIENT_ID,
-        redirect_uri: process.env.APPLE_REDIRECT_URI,
+        redirect_uri: process.env.APPLE_LOGIN_REDIRECT_URI,
       }),
       {
         headers: {
@@ -138,6 +137,41 @@ router.post("/callback/apple", (req, res) => {
     });
 });
 
+router.get("/callback/discord", async (req, res) => {
+  const code = req.query.code
+  // res.json({ code });
+  try {
+    const test = await axios
+      .post(
+        'https://discord.com/api/oauth2/token',
+        qs.stringify({
+          client_id: process.env.DISCORD_CLIENT_ID,
+          client_secret: process.env.DISCORD_CLIENT_SECRET,
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: process.env.DISCORD_REDIRECT_URI,
+          scope: 'identify email'
+        }),
+        {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+        }
+      )
+    const access_token = test.data.access_token;
+    console.log(access_token);
+    // res.json({ success: 1, access_token });
+    const userdata = await axios.get('https://discord.com/api/users/@me', {
+      headers: {
+        authorization: `Bearer ${access_token}`,
+      },
+    });
+    // console.log(userdata);
+    res.json(userdata.data)
+  } catch (err) {
+    res.json({ failed: 1, err });
+  }
+})
 
 router.put("/signup", async (req, res) => {
   let tkn = req.body.jwt_token;
@@ -204,6 +238,7 @@ router.delete("/account", async (req, res) => {
     res.status(500).json({ uccess: 0, err: err })
   }
 });
+
 
 router.post("/check_age", (req, res) => {
   let tmpdate = req.body.birthdate;
@@ -325,7 +360,7 @@ router.post("/login", async (req, res) => {
   } else if (iss == "jamdeeptalk.com") {
     const token = jwt.sign({ email: decodetoken.email, sub: decodetoken.sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
     await knex("user").update({ our_jwt: token }).where("id", decodetoken.sub)
-    res.json({ id_token:token });
+    res.json({ id_token: token });
   }
 });
 
