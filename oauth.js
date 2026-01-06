@@ -7,6 +7,7 @@ const knex = require("./knex.js");
 const qs = require("querystring");
 const fs = require('fs');
 const mailer = require("nodemailer");
+const { decode } = require("punycode");
 const define_id = require('./general.js').define_id;
 const tmp_convert_our_id = require('./general.js').tmp_convert_our_id;
 const MEMBER_COUNT = 85;
@@ -159,17 +160,18 @@ router.get("/callback/discord", async (req, res) => {
         }
       )
     const access_token = test.data.access_token;
-    console.log(access_token);
+    console.log(test.data);
     // res.json({ success: 1, access_token });
     const userdata = await axios.get('https://discord.com/api/users/@me', {
       headers: {
         authorization: `Bearer ${access_token}`,
       },
     });
-    // console.log(userdata);
-    res.json(userdata.data)
+    console.log(userdata.data);
+    const token = jwt.sign({ refresh_token: test.data.refresh_token, email: userdata.data.email, sub: userdata.data.id, is_discord: 1, access_token }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+    res.json({ success: 1, token })
   } catch (err) {
-    res.json({ failed: 1, err });
+    res.json({ success: 0, err });
   }
 })
 
@@ -189,6 +191,9 @@ router.put("/signup", async (req, res) => {
   let appleAccessCode = null;
   let appleRefreshCode = null;
   let appleIdToken = null;
+  let discord_id = null;
+  let discord_access_code = null;
+  let discord_refresh_code = null;
   if (iss == "https://kauth.kakao.com") {
     kakaoAccessCode = req.body.access_token;
     kakaoRefreshCode = req.body.refresh_token;
@@ -200,6 +205,12 @@ router.put("/signup", async (req, res) => {
     appleRefreshCode = req.body.refresh_token;
     appleIdToken = tkn;
   }
+  if (iss == "jamdeeptalk.com" && decodetoken.is_discord != undefined) {
+    discord_id = decodetoken.sub
+    discord_access_code = decodetoken.access_token
+    discord_refresh_code = decodetoken.refresh_token
+    return res.json({ discord_refresh_code });
+  }
   try {
     id = await trx("user").insert(
       {
@@ -210,6 +221,9 @@ router.put("/signup", async (req, res) => {
         apple_refresh_code: appleRefreshCode,
         apple_id_token: appleIdToken,
         kakao_id: kakaoid,
+        discord_id,
+        discord_access_code,
+        discord_refresh_code,
         email: req.body.email
       }
     );
