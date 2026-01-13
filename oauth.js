@@ -146,11 +146,11 @@ router.get("/callback/discord", async (req, res) => {
       .post(
         'https://discord.com/api/oauth2/token',
         qs.stringify({
-          client_id: process.env.DISCORD_CLIENT_ID,
-          client_secret: process.env.DISCORD_CLIENT_SECRET,
+          client_id: process.env.DISCORD_CLIENT_ID.replace(/['",]/g, ''),
+          client_secret: process.env.DISCORD_CLIENT_SECRET.replace(/['",]/g, ''),
           grant_type: "authorization_code",
           code,
-          redirect_uri: process.env.DISCORD_REDIRECT_URI,
+          redirect_uri: process.env.DISCORD_REDIRECT_URI.replace(/['",]/g, ''),
           scope: 'identify email'
         }),
         {
@@ -175,6 +175,33 @@ router.get("/callback/discord", async (req, res) => {
   }
 })
 
+router.get("/google", async (req, res) => {
+  const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+  const client_id = process.env.GOOGLE_CLIENT_ID.replace(/['",]/g, '');
+  const redirect_uri = process.env.GOOGLE_REDIRECT_URI.replace(/['",]/g, '');
+  const scope = "openid email profile";
+  const response_type = "code";
+  const params = new URLSearchParams({
+    client_id, redirect_uri, scope, response_type, access_type: 'offline', prompt: 'consent'
+  })
+  authUrl = `${GOOGLE_AUTH_URL}?${params.toString()}`;
+  console.log(authUrl);
+  res.redirect(authUrl);
+});
+
+router.get("/callback/google", async (req, res) => {
+  const { code } = req.query
+  const tokenres = await axios.post('https://oauth2.googleapis.com/token', {
+    code,
+    client_id: process.env.GOOGLE_CLIENT_ID.replace(/['",]/g, ''),
+    client_secret: process.env.GOOGLE_CLIENT_SECRET.replace(/['",]/g, ''),
+    redirect_uri: process.env.GOOGLE_REDIRECT_URI.replace(/['",]/g, ''),
+    grant_type: 'authorization_code'
+  });
+  const { access_token, id_token } = tokenres.data;
+  res.json({ access_token, id_token });
+})
+
 router.put("/signup", async (req, res) => {
   let tkn = req.body.jwt_token;
   let decodetoken = jwt.decode(tkn);
@@ -194,6 +221,9 @@ router.put("/signup", async (req, res) => {
   let discord_id = null;
   let discord_access_code = null;
   let discord_refresh_code = null;
+  let google_id = null;
+  let google_access_code = null;
+  let google_id_token = null;
   if (iss == "https://kauth.kakao.com") {
     kakaoAccessCode = req.body.access_token;
     kakaoRefreshCode = req.body.refresh_token;
@@ -211,6 +241,11 @@ router.put("/signup", async (req, res) => {
     discord_refresh_code = decodetoken.refresh_token
     return res.json({ discord_refresh_code });
   }
+  if (iss == "https://accounts.google.com") {
+    google_id = decodetoken.sub;
+    google_access_code = req.body.access_token;
+    google_id_token = tkn;
+  }
   try {
     id = await trx("user").insert(
       {
@@ -224,6 +259,9 @@ router.put("/signup", async (req, res) => {
         discord_id,
         discord_access_code,
         discord_refresh_code,
+        google_id,
+        google_access_code,
+        google_id_token,
         email: req.body.email
       }
     );
