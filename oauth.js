@@ -176,13 +176,14 @@ router.get("/callback/discord", async (req, res) => {
 })
 
 router.get("/google", async (req, res) => {
+  const app_url = req.query.redirect_uri;
   const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
   const client_id = process.env.GOOGLE_CLIENT_ID.replace(/['",]/g, '');
   const redirect_uri = process.env.GOOGLE_REDIRECT_URI.replace(/['",]/g, '');
   const scope = "openid email profile";
   const response_type = "code";
   const params = new URLSearchParams({
-    client_id, redirect_uri, scope, response_type, access_type: 'offline', prompt: 'consent'
+    client_id, redirect_uri, scope, response_type, access_type: 'offline', prompt: 'consent', state: app_url
   })
   authUrl = `${GOOGLE_AUTH_URL}?${params.toString()}`;
   console.log(authUrl);
@@ -190,7 +191,7 @@ router.get("/google", async (req, res) => {
 });
 
 router.get("/callback/google", async (req, res) => {
-  const { code } = req.query
+  const { code, state } = req.query
   const tokenres = await axios.post('https://oauth2.googleapis.com/token', {
     code,
     client_id: process.env.GOOGLE_CLIENT_ID.replace(/['",]/g, ''),
@@ -198,8 +199,15 @@ router.get("/callback/google", async (req, res) => {
     redirect_uri: process.env.GOOGLE_REDIRECT_URI.replace(/['",]/g, ''),
     grant_type: 'authorization_code'
   });
-  const { access_token, id_token } = tokenres.data;
-  res.json({ access_token, id_token });
+  console.log(tokenres.data);
+  const { access_token, id_token, refresh_token } = tokenres.data;
+  const params = new URLSearchParams({
+    access_token, id_token, refresh_token
+  });
+  redirectUrl = `${state}?${params.toString()}`;
+  console.log(redirectUrl);
+  res.redirect(redirectUrl);
+  // res.json({ access_token, id_token });
 })
 
 router.put("/signup", async (req, res) => {
@@ -245,6 +253,7 @@ router.put("/signup", async (req, res) => {
     google_id = decodetoken.sub;
     google_access_code = req.body.access_token;
     google_id_token = tkn;
+    google_refresh_code = req.body.refresh_token;
   }
   try {
     id = await trx("user").insert(
