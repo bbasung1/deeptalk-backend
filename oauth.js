@@ -256,7 +256,7 @@ router.put("/signup", async (req, res) => {
     google_refresh_code = req.body.refresh_token;
   }
   try {
-    id = await trx("user").insert(
+    [id] = await trx("user").insert(
       {
         kakao_access_code: kakaoAccessCode,
         kakao_refresh_code: kakaoRefreshCode,
@@ -422,6 +422,14 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign({ email: decodetoken.email, sub: decodetoken.sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
     await knex("user").update({ our_jwt: token }).where("id", decodetoken.sub)
     res.json({ id_token: token });
+  } else if (iss == "https://accounts.google.com") {
+    const [id] = await knex.select("google_access_code", "google_refresh_code", "id").from("user").where("google_id", sub);
+    console.log();
+    if (id == undefined) {
+      return res.json({ success: 0, msg: "not sign up" })
+    }
+    const token = jwt.sign({ email: decodetoken.email, sub: id.id }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+    return res.json({ id_token: token });
   }
 });
 
