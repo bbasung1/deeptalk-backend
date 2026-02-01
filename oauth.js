@@ -256,7 +256,7 @@ router.put("/signup", async (req, res) => {
     google_refresh_code = req.body.refresh_token;
   }
   try {
-    id = await trx("user").insert(
+    [id] = await trx("user").insert(
       {
         kakao_access_code: kakaoAccessCode,
         kakao_refresh_code: kakaoRefreshCode,
