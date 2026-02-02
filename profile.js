@@ -212,5 +212,12 @@ router.put("/mail", async (req, res) => {
   }
 });
 
+router.get("/account_info", async (req, res) => {
+  const id = await define_id(req.headers.authorization, res);
+  const [info] = await knex("user").select("user.email", "profile.user_id").leftJoin("profile", "user.id", "profile.id").where("user.id", id);
+  console.log(info);
+  res.json(info);
+});
+
 module.exports = router;
 

@@ -444,6 +444,37 @@ router.post("/cancel_delete", async (req, res) => {
 
 })
 
+router.get("/member_check", async (req, res) => {
+  const token = req.headers.authorization.split("Bearer ")[1]
+  const tokendata = jwt.decode(token);
+  console.log(tokendata)
+  const iss = tokendata.iss;
+  const sub = tokendata.sub;
+  let type = "";
+  if (iss == "https://kauth.kakao.com") {
+    type = "kakao"
+  } else if (iss == "https://appleid.apple.com") {
+    type = "apple"
+  } else if (iss == "https://accounts.google.com") {
+    type = "google"
+  } else if (iss == "jamdeeptalk.com" && tokendata.is_discord) {
+    type = "discord"
+  } else if (iss == "jamdeeptalk.com") {
+    return res.json({ is_member: 1, jwt: jwt.sign({ email: tokendata.email, sub: sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' }) })
+  } else {
+    return res.json({ is_member: 0 });
+  }
+  const [id] = await knex("user").select("id").where(`${type}_id`, sub);
+  console.log(id)
+  let data = { is_member: 0 }
+  if (id != undefined) {
+    data.is_member = 1
+    data.jwt = jwt.sign({ email: tokendata.email, sub: id }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+  }
+  console.log(data);
+  res.json(data);
+});
+
 router.post("/mail_check", async (req, res) => {
   const mail_addr = req.body.mail_addr;
   const [check_mail] = await knex("user").select("id").where("email", mail_addr);
