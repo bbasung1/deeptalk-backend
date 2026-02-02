@@ -521,7 +521,7 @@ deeptalk2026@gmail.com`,
 
 router.get("/remain_people", async (req, res) => {
   let [test] = await knex("user").whereNull("deletetime").count({ "cur_member": "*" });
-  test.max_member = MEMBER_COUNT;
+  // test.max_member = MEMBER_COUNT;
   console.log(test);
   res.json(test);
 });
