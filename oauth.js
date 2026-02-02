@@ -10,7 +10,7 @@ const mailer = require("nodemailer");
 const { decode } = require("punycode");
 const define_id = require('./general.js').define_id;
 const tmp_convert_our_id = require('./general.js').tmp_convert_our_id;
-const MEMBER_COUNT = 85;
+// const MEMBER_COUNT = 85;
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 dotenv.config();
@@ -215,10 +215,10 @@ router.put("/signup", async (req, res) => {
   let decodetoken = jwt.decode(tkn);
   let iss = decodetoken.iss;
   const trx = await knex.transaction();
-  const member = await knex("user").whereNull("deletetime").count({ "member": "*" });
-  if (MEMBER_COUNT < member[0].member) {
-    return res.status(500).json({ success: 0, err_code: 5001, msg: "멤버가 최대치에 도달했습니다!" });
-  }
+  // const member = await knex("user").whereNull("deletetime").count({ "member": "*" });
+  // if (MEMBER_COUNT < member[0].member) {
+  //   return res.status(500).json({ success: 0, err_code: 5001, msg: "멤버가 최대치에 도달했습니다!" });
+  // }
   let kakaoid = null;
   let kakaoAccessCode = null;
   let kakaoRefreshCode = null;
