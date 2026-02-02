@@ -10,7 +10,7 @@ const mailer = require("nodemailer");
 const { decode } = require("punycode");
 const define_id = require('./general.js').define_id;
 const tmp_convert_our_id = require('./general.js').tmp_convert_our_id;
-// const MEMBER_COUNT = 85;
+const MEMBER_COUNT = 99999;
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 dotenv.config();
@@ -521,7 +521,7 @@ deeptalk2026@gmail.com`,
 
 router.get("/remain_people", async (req, res) => {
   let [test] = await knex("user").whereNull("deletetime").count({ "cur_member": "*" });
-  // test.max_member = MEMBER_COUNT;
+  test.max_member = MEMBER_COUNT;
   console.log(test);
   res.json(test);
 });
