@@ -211,8 +211,11 @@ router.get("/callback/google", async (req, res) => {
 })
 
 router.put("/signup", async (req, res) => {
+  console.log("signup");
+  console.log(req.body);
   let tkn = req.body.jwt_token;
   let decodetoken = jwt.decode(tkn);
+  console.log(decodetoken);
   let iss = decodetoken.iss;
   const trx = await knex.transaction();
   // const member = await knex("user").whereNull("deletetime").count({ "member": "*" });
@@ -247,7 +250,7 @@ router.put("/signup", async (req, res) => {
     discord_id = decodetoken.sub
     discord_access_code = decodetoken.access_token
     discord_refresh_code = decodetoken.refresh_token
-    return res.json({ discord_refresh_code });
+    // return res.json({ discord_refresh_code });
   }
   if (iss == "https://accounts.google.com") {
     google_id = decodetoken.sub;
@@ -316,6 +319,7 @@ router.post("/check_age", (req, res) => {
 })
 
 router.post("/login", async (req, res) => {
+  console.log("login");
   console.log(req.headers.authorization);
   let tkn = req.headers.authorization.split("Bearer ")[1];
   let decodetoken = jwt.decode(tkn);
@@ -419,8 +423,14 @@ router.post("/login", async (req, res) => {
           });
       });
   } else if (iss == "jamdeeptalk.com") {
-    const token = jwt.sign({ email: decodetoken.email, sub: decodetoken.sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
-    await knex("user").update({ our_jwt: token }).where("id", decodetoken.sub)
+    let sub = decodetoken.sub
+    if (decodetoken.is_discord != undefined) {
+      const [id] = await knex("user").select("id").where("discord_id", decodetoken.sub);
+      console.log(id.id);
+      sub = id.id;
+    }
+    const token = jwt.sign({ email: decodetoken.email, sub: sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+    await knex("user").update({ our_jwt: token }).where("id", sub)
     res.json({ id_token: token });
   } else if (iss == "https://accounts.google.com") {
     const [id] = await knex.select("google_access_code", "google_refresh_code", "id").from("user").where("google_id", sub);
@@ -445,7 +455,10 @@ router.post("/cancel_delete", async (req, res) => {
 })
 
 router.get("/member_check", async (req, res) => {
+  console.log("member_check");
   const token = req.headers.authorization.split("Bearer ")[1]
+  console.log("token")
+  console.log(token);
   const tokendata = jwt.decode(token);
   console.log(tokendata)
   const iss = tokendata.iss;
@@ -458,8 +471,12 @@ router.get("/member_check", async (req, res) => {
   } else if (iss == "https://accounts.google.com") {
     type = "google"
   } else if (iss == "jamdeeptalk.com" && tokendata.is_discord) {
+    console.log("discord");
+    console.log(tokendata);
     type = "discord"
   } else if (iss == "jamdeeptalk.com") {
+    console.log("jamdeeptalk");
+    console.log(tokendata);
     return res.json({ is_member: 1, jwt: jwt.sign({ email: tokendata.email, sub: sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' }) })
   } else {
     return res.json({ is_member: 0 });
