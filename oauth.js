@@ -559,4 +559,14 @@ router.get("/bearertest", async (req, res) => {
   res.json({ ourid });
 });
 
+router.post("/duple_mail_check", async (req, res) => {
+  const target_mail = req.body.mail;
+  const [mail] = await knex("user").select("email").where("email", target_mail);
+  let senddata = { duple: 1 };
+  if (mail == undefined) {
+    senddata.duple = 0;
+  }
+  res.json(senddata);
+});
+
 module.exports = router;
