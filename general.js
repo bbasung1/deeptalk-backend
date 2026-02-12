@@ -136,11 +136,25 @@ async function handleBlockAction(req, res, actionType) {
     }
 }
 
+function make_code(len) {
+    let aucode = ""
+    for (let i = 1; i <= len; i++) {
+        let testcode = Math.floor(Math.random() * 36)
+        if (testcode < 10) {
+            aucode += testcode.toString()
+        } else {
+            aucode += String.fromCharCode(testcode + 55);
+        }
+    }
+    return aucode;
+}
+
 module.exports = {
     convert_our_id,
     define_id,
     tmp_convert_our_id,
     handleBlockAction,
+    make_code,
     typeMap,
     TYPE_BLOCK,
     TYPE_MUTE,

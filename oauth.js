@@ -8,8 +8,7 @@ const qs = require("querystring");
 const fs = require('fs');
 const mailer = require("nodemailer");
 const { decode } = require("punycode");
-const define_id = require('./general.js').define_id;
-const tmp_convert_our_id = require('./general.js').tmp_convert_our_id;
+const { define_id, tmp_convert_our_id, make_code } = require('./general.js')
 const MEMBER_COUNT = 99999;
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -567,6 +566,30 @@ router.post("/duple_mail_check", async (req, res) => {
     senddata.duple = 0;
   }
   res.json(senddata);
+});
+
+router.post("/passwd", async (req, res) => {
+  const passwd = req.body.passwd;
+  const trx = await knex.transaction();
+  const [vaild] = await knex("passwd").select("passwd", "change", "vaild_date").where("passwd", passwd);
+  console.log(vaild)
+  try {
+    if (vaild == undefined) {
+      console.log("unvaild");
+      return res.json({ success: 0, msg: "잘못된 암호입니다." })
+    }
+    if (vaild.change) {
+      console.log("change");
+      const code = make_code(5);
+      console.log(code)
+      await trx("passwd").update({ passwd: make_code(5) }).where("passwd", passwd);
+      trx.commit()
+    }
+    return res.json({ success: 1, msg: "인증 완료" })
+  } catch {
+    trx.rollback();
+    return res.json({ success: 0, msg: "오류발생" })
+  }
 });
 
 module.exports = router;
