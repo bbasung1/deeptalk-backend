@@ -149,12 +149,18 @@ function make_code(len) {
     return aucode;
 }
 
+async function add_nickname(id) {
+    [nickname] = await knex("profile").select("nickname").where("id", id)
+    return nickname.nickname;
+}
+
 module.exports = {
     convert_our_id,
     define_id,
     tmp_convert_our_id,
     handleBlockAction,
     make_code,
+    add_nickname,
     typeMap,
     TYPE_BLOCK,
     TYPE_MUTE,

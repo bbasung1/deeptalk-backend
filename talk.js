@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
+const { add_nickname } = require("./general.js");
 const define_id = require('./general.js').define_id;
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -26,6 +27,8 @@ router.get("/:id", async (req, res) => {
         }
         talk.views = talk.views + 1;
         await knex("talk").where("talk_num", req.params.id).update({ views: talk.views });
+        nickname = await add_nickname(talk.writer_id);
+        talk.nickname = nickname;
         return res.json(talk);
     } catch (err) {
         console.error(err);

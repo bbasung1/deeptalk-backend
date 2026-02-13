@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id } = require("./general.js");
+const { define_id, add_nickname } = require("./general.js");
 
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -87,6 +87,8 @@ async function resort_post(type, ourid) {
     delete i["engagement_score"];
     delete i["freshness_score"];
     delete i["final_score"];
+    nickname = await add_nickname(i["writer_id"]);
+    i.nickname = nickname;
   }
   return posts
 }
