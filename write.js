@@ -37,6 +37,7 @@ router.post("/", upload.single("file"), async (req, res) => {
 
         await knex(table).insert({
             writer_id: writer_id,
+            user_id: user_id,
             header: header,
             subject: subject,
             reported: 0, // 기본값: 신고되지 않음

@@ -47,7 +47,7 @@ router.post("/list", async (req, res) => {
     if (!ourid) {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }
-    const content = await knex("block_list").select("blocked_user_id").where({ user_id: ourid, type: TYPE_MUTE });
+    const content = await knex("block_list").select("block_list.blocked_user_id","profile.nickname","profile.user_id","profile.image").leftJoin("profile", "block_list.blocked_user_id", "profile.id").where({ "block_list.user_id": ourid, "block_list.type": TYPE_MUTE });
     console.log(content);
     return res.json(content)
 });

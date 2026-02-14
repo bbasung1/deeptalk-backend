@@ -26,6 +26,8 @@ router.get("/:id", async (req, res) => {
         }
         think.views = think.views + 1;
         await knex("think").where("think_num", req.params.id).update({ views: think.views });
+        nickname = await add_nickname(think.writer_id);
+        think.nickname = nickname;
         return res.json(think);
     } catch (err) {
         console.error(err);

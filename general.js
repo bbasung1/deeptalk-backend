@@ -74,6 +74,7 @@ async function handleBlockAction(req, res, actionType) {
     if (!ourid) return; // 인증 실패 시 종료
 
     const { target_id } = req.body; // 이제 body에는 target_id만 있으면 됨
+    console.log(target_id);
 
     if (!target_id) {
         return res.status(400).json({ success: false, message: "target_id가 필요합니다." });
@@ -149,12 +150,18 @@ function make_code(len) {
     return aucode;
 }
 
+async function add_nickname(id) {
+    [nickname] = await knex("profile").select("nickname").where("id", id)
+    return nickname.nickname;
+}
+
 module.exports = {
     convert_our_id,
     define_id,
     tmp_convert_our_id,
     handleBlockAction,
     make_code,
+    add_nickname,
     typeMap,
     TYPE_BLOCK,
     TYPE_MUTE,

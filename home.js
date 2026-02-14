@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id } = require("./general.js");
+const { define_id, add_nickname } = require("./general.js");
 
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -10,7 +10,7 @@ router.use(express.urlencoded({ extended: true }));
 router.get("/Jam-Talk", async (req, res) => {
   try {
     const ourid = await define_id(req.headers.authorization, res);
-    if (!ourid) return; // 인증 실패 시 종료
+    if (!ourid) return res.json({ error: "인증 실패" }); // 인증 실패 시 종료
 
     const talk = await resort_post("talk", ourid);
 
@@ -87,6 +87,8 @@ async function resort_post(type, ourid) {
     delete i["engagement_score"];
     delete i["freshness_score"];
     delete i["final_score"];
+    nickname = await add_nickname(i["writer_id"]);
+    i.nickname = nickname;
   }
   return posts
 }
