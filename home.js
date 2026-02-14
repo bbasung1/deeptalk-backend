@@ -10,7 +10,7 @@ router.use(express.urlencoded({ extended: true }));
 router.get("/Jam-Talk", async (req, res) => {
   try {
     const ourid = await define_id(req.headers.authorization, res);
-    if (!ourid) return; // 인증 실패 시 종료
+    if (!ourid) return res.json({ error: "인증 실패" }); // 인증 실패 시 종료
 
     const talk = await resort_post("talk", ourid);
 

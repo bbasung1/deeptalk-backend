@@ -74,6 +74,7 @@ async function handleBlockAction(req, res, actionType) {
     if (!ourid) return; // 인증 실패 시 종료
 
     const { target_id } = req.body; // 이제 body에는 target_id만 있으면 됨
+    console.log(target_id);
 
     if (!target_id) {
         return res.status(400).json({ success: false, message: "target_id가 필요합니다." });
