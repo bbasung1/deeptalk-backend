@@ -10,6 +10,17 @@ router.use(express.urlencoded({ extended: true }));
 router.use("/block", require("./profile/block.js"));
 router.use("/mute", require("./profile/mute.js"));
 router.use("/image", require("./profile/image.js"));
+
+router.post("/info", async (req, res) => {
+  const user_id = req.body.user_id;
+  const data = await knex("profile").select("*").where("user_id", user_id).first();
+  delete data["servicealram"];
+  delete data["useralram"];
+  delete data["marketalram"];
+  delete data["theme"];
+  return res.json(data);
+})
+
 router.post("/alram", (req, res) => {
   let updatedata = {}
   if (req.body.service != null) {
@@ -215,7 +226,7 @@ router.put("/mail", async (req, res) => {
 
 router.get("/account_info", async (req, res) => {
   const id = await define_id(req.headers.authorization, res);
-  const [info] = await knex("user").select("user.email", "profile.user_id","profile.nickname").leftJoin("profile", "user.id", "profile.id").where("user.id", id);
+  const [info] = await knex("user").select("user.email", "profile.user_id", "profile.nickname").leftJoin("profile", "user.id", "profile.id").where("user.id", id);
   console.log(info);
   res.json(info);
 });
