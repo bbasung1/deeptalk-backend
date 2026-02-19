@@ -9,6 +9,7 @@ router.use(express.urlencoded({ extended: true }));
 
 router.use("/block", require("./profile/block.js"));
 router.use("/mute", require("./profile/mute.js"));
+router.use("/image", require("./profile/image.js"));
 router.post("/alram", (req, res) => {
   let updatedata = {}
   if (req.body.service != null) {
