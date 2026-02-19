@@ -18,6 +18,7 @@ router.post("/info", async (req, res) => {
   delete data["useralram"];
   delete data["marketalram"];
   delete data["theme"];
+  delete data["profile_image"]
   return res.json(data);
 })
 
