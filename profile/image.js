@@ -32,8 +32,7 @@ router.post("/", upload.single("file"), async (req, res) => {
         await knex("profile").update({ image: filename }).where({ id: ourid });
         return res.json({
             success: true,
-            filename,
-            savedPath
+            filename
         });
 
     } catch (err) {
