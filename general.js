@@ -21,10 +21,10 @@ async function convert_our_id(user_id) {
 };
 
 async function tmp_convert_our_id(token) {
-    console.log(token);
+    // console.log(token);
     let tkn = token.split("Bearer ")[1];
     let decodetoken = jwt.decode(tkn);
-    console.log(decodetoken);
+    // console.log(decodetoken);
     if (decodetoken == null) {
         console.error("nodata");
         return {
@@ -61,7 +61,7 @@ async function define_id(test_id, res) {
         id = await tmp_convert_our_id(test_id);
         if (id.code != undefined) {
             const { httpcode, ...rest } = id;
-            console.log(httpcode);
+            // console.log(httpcode);
             console.log(rest);
             return res.status(httpcode).json(rest);
         }
