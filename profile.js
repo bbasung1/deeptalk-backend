@@ -14,6 +14,9 @@ router.use("/image", require("./profile/image.js"));
 router.post("/info", async (req, res) => {
   const user_id = req.body.user_id;
   const data = await knex("profile").select("*").where("user_id", user_id).first();
+  if (data.length == 0) {
+    return res.status(500).json({ msg: "user_id를 찾을수 없습니다." })
+  }
   delete data["servicealram"];
   delete data["useralram"];
   delete data["marketalram"];
