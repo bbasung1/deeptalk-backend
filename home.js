@@ -1,13 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, add_nickname } = require("./general.js");
+const { define_id, add_nickname, user_id_to_id } = require("./general.js");
 
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
 const { stream } = require("./log.js");
 const morgan = require("morgan");
+const { profile } = require("winston");
 router.use(
   morgan(
     "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
@@ -96,8 +97,10 @@ async function resort_post(type, ourid) {
     delete i["engagement_score"];
     delete i["freshness_score"];
     delete i["final_score"];
-    nickname = await add_nickname(i["writer_id"]);
-    i.nickname = nickname;
+    // nickname = await add_nickname(i["writer_id"]);
+    profile_image = await knex("profile").select("image", "nickname").where("id", i["writer_id"]).first()
+    i.nickname = profile_image.nickname;
+    i.profile_image = profile_image.image;
   }
   return posts
 }
