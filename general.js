@@ -161,7 +161,7 @@ async function id_to_user_id(id) {
 
 async function user_id_to_id(user_id) {
     id_data = await knex("profile").select("id").where("user_id", user_id).first();
-    return user_id_data.user_id
+    return id_data.id
 }
 
 module.exports = {
