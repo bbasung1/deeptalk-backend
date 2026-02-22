@@ -5,6 +5,15 @@ const define_id = require('./general.js').define_id;
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
+const { stream } = require("./log.js");
+const morgan = require("morgan");
+router.use(
+    morgan(
+        "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
+        { stream: stream }
+    )
+);
+
 router.get("/", async (req, res) => {
     const trx = await knex.transaction();
 

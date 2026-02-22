@@ -6,6 +6,15 @@ const { define_id, add_nickname } = require("./general.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
+const { stream } = require("./log.js");
+const morgan = require("morgan");
+router.use(
+  morgan(
+    "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
+    { stream: stream }
+  )
+);
+
 // /Jam-Talk: 차단 사용자 글 제외
 router.get("/Jam-Talk", async (req, res) => {
   try {

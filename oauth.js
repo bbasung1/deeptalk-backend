@@ -14,6 +14,15 @@ router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 dotenv.config();
 
+const { stream } = require("./log.js");
+const morgan = require("morgan");
+router.use(
+  morgan(
+    "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
+    { stream: stream }
+  )
+);
+
 router.get("/test1", async (req, res) => {
   test = await knex("user").whereNull("deletetime").count({ "test": "*" });
   if (MEMBER_COUNT < test[0].test) {

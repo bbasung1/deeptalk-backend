@@ -5,12 +5,20 @@ const { convert_our_id } = require("./general.js");
 const define_id = require('./general.js').define_id;
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
-
+const { stream } = require("./log.js");
+const morgan = require("morgan");
+router.use(
+    morgan(
+        "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
+        { stream: stream }
+    )
+);
 router.post("/:id", async (req, res) => {
     const ourid = await define_id(req.headers.authorization, res);
     if (!ourid) {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }
+    console.log(req.body);
     const [dupcheck] = await knex("post_like").select("*").where({ type: req.body.type, user_id: ourid, post_id: req.params.id })
     console.log(dupcheck);
     const trx = await knex.transaction();

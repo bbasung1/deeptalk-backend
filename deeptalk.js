@@ -8,6 +8,8 @@ const https = require("https");
 const { error } = require("console");
 const cron = require('node-cron');
 const knex = require('./knex.js');
+const morgan = require("morgan");
+const { logger, stream } = require("./log.js");
 
 let httpsmode = true;
 let options = {}
@@ -43,6 +45,24 @@ app.use("/report", require("./report.js"));
 // app.use("/test", require("./test.js"));
 app.use("/test", require("./test.js"));
 app.use("/files", express.static(process.env.FILE_DIR));
+
+morgan.token("status", function (req, res) {
+    let color;
+    if (res.statusCode == 404) color = "\x1B[44m";
+    else if (res.statusCode < 300) color = "\x1B[32m"; //green
+    else if (res.statusCode < 400) color = "\x1B[36m"; //cyan
+    else if (res.statusCode < 500) color = "\x1B[33m"; //yellow
+    else if (res.statusCode < 600) color = "\x1B[31m"; //red
+    else color = "\x1B[0m"; /*글자색 초기화*/
+
+    return color + res.statusCode + "\x1B[0m" /*보라색*/;
+});
+app.use(
+    morgan(
+        "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
+        { stream: stream }
+    )
+);
 
 app.use(cors());
 

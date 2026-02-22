@@ -6,6 +6,15 @@ const multer = require("multer");
 const upload = multer();
 const { saveImage, generateFilename } = require("./utils/imageSaver");
 
+const { stream } = require("./log.js");
+const morgan = require("morgan");
+router.use(
+    morgan(
+        "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
+        { stream: stream }
+    )
+);
+
 router.use(express.json());
 
 router.post("/", upload.single("file"), async (req, res) => {
