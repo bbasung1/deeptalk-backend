@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, user_id_to_id } = require('./general.js').define_id;
+const { define_id, user_id_to_id } = require('./general.js');
 
 router.use(express.json());
 
@@ -159,17 +159,19 @@ router.get("/", async (req, res) => {
 });
 
 router.delete("/:comment_id", async (req, res) => {
-    const id = define_id(req.headers.authorization, res);
-    const comment_data = await knex("comment").where("comment_id", req.params.comment_id).first();
+    const id = await define_id(req.headers.authorization, res);
+    const comment_data = await knex("comment").select("user_id").where("comment_id", req.params.comment_id).first();
     const comment_writer_id = await user_id_to_id(comment_data.user_id);
     if (id != comment_writer_id) {
-        return res.status(403).json({ "msg": "삭제 권한이 없습니다", "code": "4101" })
+        console.log(id);
+        console.log(comment_data.user_id);
+        return res.status(403).json({ "msg": "삭제 권한이 없습니다", "success": 0 })
     }
     try {
         await knex("comment").where("comment_id", req.params.comment_id).delete();
         return res.json({ "success": 1 })
     } catch {
-        return res.status(500).json({ "success": 0 });
+        return res.status(500).json({ "success": 0, "msg": "삭제 과정에서 오류가 발생했습니다" });
     }
 })
 
