@@ -7,6 +7,15 @@ const knex = require("./knex.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
+const { stream } = require("./log.js");
+const morgan = require("morgan");
+router.use(
+  morgan(
+    "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
+    { stream: stream }
+  )
+);
+
 router.use("/block", require("./profile/block.js"));
 router.use("/mute", require("./profile/mute.js"));
 router.use("/image", require("./profile/image.js"));

@@ -3,6 +3,15 @@ const router = express.Router();
 const knex = require("./knex.js");
 const { define_id } = require("./general.js");
 
+const { stream } = require("./log.js");
+const morgan = require("morgan");
+router.use(
+  morgan(
+    "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
+    { stream: stream }
+  )
+);
+
 /**
  * 📌 신고 생성 API
  * POST /report
