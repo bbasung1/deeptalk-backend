@@ -154,6 +154,15 @@ async function add_nickname(id) {
     [nickname] = await knex("profile").select("nickname").where("id", id)
     return nickname.nickname;
 }
+async function id_to_user_id(id) {
+    user_id_data = await knex("profile").select("user_id").where("id", id).first();
+    return user_id_data.user_id
+}
+
+async function user_id_to_id(user_id) {
+    id_data = await knex("profile").select("id").where("user_id", user_id).first();
+    return user_id_data.user_id
+}
 
 module.exports = {
     convert_our_id,
@@ -162,6 +171,8 @@ module.exports = {
     handleBlockAction,
     make_code,
     add_nickname,
+    id_to_user_id,
+    user_id_to_id,
     typeMap,
     TYPE_BLOCK,
     TYPE_MUTE,
