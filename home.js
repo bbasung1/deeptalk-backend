@@ -90,10 +90,10 @@ async function resort_post(type, ourid) {
     .select(
       'p.*',
       "profile.nickname",
-      "profile.image as profile_image",
-      knex.raw(`${rawFinalScoreSQL} as final_score`)
+      "profile.image as profile_image"
     )
-    .orderBy(knex.raw(rawFinalScoreSQL), 'desc');
+    // .orderBy(knex.raw(rawFinalScoreSQL), 'desc');
+    .orderByRaw(`${rawFreshnessScoreSQL} DESC`);
   return posts
 }
 
