@@ -19,6 +19,7 @@ router.use(
 router.use("/block", require("./profile/block.js"));
 router.use("/mute", require("./profile/mute.js"));
 router.use("/image", require("./profile/image.js"));
+router.use("/status_msg", require("./profile/status_msg.js"));
 
 router.post("/info", async (req, res) => {
   const user_id = req.body.user_id;
