@@ -23,13 +23,14 @@ router.get("/:id", async (req, res) => {
     };
     try {
         [think] = await knex('think')
-            .whereNotIn('writer_id', function () {
+            .leftJoin("profile", "think.writer_id", "profile.id")
+            .whereNotIn('think.writer_id', function () {
                 this.select('blocked_user_id')
                     .from('block_list')
                     .where('user_id', id);
             })
             .where("think_num", req.params.id)
-            .select('*');
+            .select('think.*', "profile.nickname");
         if (think == undefined) {
             return res.json({ msg: "없거나 비공개인 포스트 입니다" })
         }
