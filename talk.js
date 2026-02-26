@@ -23,20 +23,19 @@ router.get("/:id", async (req, res) => {
     };
     try {
         [talk] = await knex('talk')
-            .whereNotIn('writer_id', function () {
+            .leftJoin("profile", "talk.writer_id", "profile.id")
+            .whereNotIn('talk.writer_id', function () {
                 this.select('blocked_user_id')
                     .from('block_list')
                     .where('user_id', id);
             })
-            .where("talk_num", req.params.id)
-            .select('*');
+            .where("talk.talk_num", req.params.id)
+            .select('talk.*', "profile.nickname");
         if (talk == undefined) {
             return res.json({ msg: "없거나 비공개인 포스트 입니다" })
         }
         talk.views = talk.views + 1;
         await knex("talk").where("talk_num", req.params.id).update({ views: talk.views });
-        nickname = await add_nickname(talk.writer_id);
-        talk.nickname = nickname;
         return res.json(talk);
     } catch (err) {
         console.error(err);
