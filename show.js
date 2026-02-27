@@ -15,7 +15,7 @@ router.use(
 );
 
 router.get("/follow/:user_id", async (req, res) => {
-    const ourid = user_id_to_id(req.params.user_id)
+    const ourid = await user_id_to_id(req.params.user_id)
     if (ourid == undefined) {
         return res.status(404).json({ msg: "존재하지 않는 유저입니다" });
     }
@@ -24,7 +24,7 @@ router.get("/follow/:user_id", async (req, res) => {
 })
 
 router.get("/follower/:user_id", async (req, res) => {
-    const ourid = user_id_to_id(req.params.user_id);
+    const ourid = await user_id_to_id(req.params.user_id);
     if (ourid == undefined) {
         return res.status(404).json({ msg: "존재하지 않는 유저입니다" });
     }
