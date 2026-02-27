@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
 const convert_our_id = require('./general.js').define_id;
+const id_to_user_id = require('./general.js').id_to_user_id;
 const multer = require("multer");
 const upload = multer();
 const { saveImage, generateFilename } = require("./utils/imageSaver");
@@ -18,9 +19,9 @@ router.use(
 router.use(express.json());
 
 router.post("/", upload.single("file"), async (req, res) => {
-    const { user_id, mode, header, subject } = req.body;
+    const { mode, header, subject } = req.body;
 
-    if (!user_id || !mode || !header || !subject) {
+    if ( !mode || !header || !subject) {
         return res.status(400).json({ success: false, message: "모든 필드를 입력해주세요." });
     }
 
@@ -43,14 +44,27 @@ router.post("/", upload.single("file"), async (req, res) => {
 
             const savedPath = await saveImage(req.file.buffer, filename);
         }
-
+        let quote = req.body.quote_num
+        console.log(quote)
+        if (req.body.quote_num) {
+            try {
+                const {quote_num, ...rest} = await knex(table).select("quote_num").where(`${table}_num`, quote).first();
+                console.log(quote_num);
+                await knex(table).update({ "quote_num": quote_num + 1 }).where(`${table}_num`, quote);
+            } catch(err) {
+                console.error(err);
+                return res.status(500).json({ msg: "인용 과정에서 문제가 발생했습니다." })
+            }
+        }
+        const user_id=await id_to_user_id(writer_id);
         await knex(table).insert({
             writer_id: writer_id,
             user_id: user_id,
             header: header,
             subject: subject,
             reported: 0, // 기본값: 신고되지 않음
-            photo: filename
+            photo: filename,
+            quote
         });
 
         res.status(201).json({ success: true, message: "글이 성공적으로 등록되었습니다." });
