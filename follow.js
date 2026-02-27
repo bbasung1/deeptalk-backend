@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id } = require("./general.js");
+const { define_id, user_id_to_id } = require("./general.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -58,6 +58,20 @@ router.get("/list", async (req, res) => {
         this.select("friend_id").from("follow").where({ user_id: ourid });
     });
     return res.json(list);
+});
+
+router.get("/mutal", async (req, res) => {
+    let mutal = 1
+    const ourid = define_id(req.headers.authorization, res);
+    const target_user_id = req.params.user_id;
+    const target_id = user_id_to_id(target_user_id);
+    const test1 = await knex("follow").select("*").where({ "friend_id": ourid, "user_id": target_id }).first();
+    const test2 = await knex("follow").select("*").where({ "friend_id": target_id, "user_id": ourid }).first();
+    if (test1.user_id == undefined || test2.user_id == undefined) {
+        mutal = 0
+    }
+    return res.json({ mutal });
+
 });
 
 module.exports = router;
