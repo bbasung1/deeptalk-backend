@@ -28,7 +28,7 @@ router.get("/follower/:user_id", async (req, res) => {
     if (ourid == undefined) {
         return res.status(404).json({ msg: "존재하지 않는 유저입니다" });
     }
-    const list = await knex("follow").leftJoin("profile", "follow.user_id", "profile.id").where("follow.friend_id", req.params.id).select("profile.nickname", "profile.user_id", "profile.image");
+    const list = await knex("follow").leftJoin("profile", "follow.user_id", "profile.id").where("follow.friend_id", ourid).select("profile.nickname", "profile.user_id", "profile.image");
     res.json(list);
 })
 
