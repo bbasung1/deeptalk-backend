@@ -32,4 +32,11 @@ router.get("/follower/:user_id", async (req, res) => {
     res.json(list);
 })
 
+router.get("/like/:type/:post_id", async (req, res) => {
+    const type = req.params.type == "free" ? 0 : 1;
+    const list = await knex("post_like").leftJoin("profile", "post_like.user_id", "profile.id").where({ "post_like.type": type, "post_like.post_id": req.params.post_id }).select("profile.nickname", "profile.user_id", "profile.image");
+    res.json(list);
+
+});
+
 module.exports = router;
