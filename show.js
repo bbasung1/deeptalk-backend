@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id } = require("./general.js");
+const { user_id_to_id } = require("./general.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -14,12 +14,20 @@ router.use(
     )
 );
 
-router.get("/follow/:id", async (req, res) => {
-    const list = await knex("follow").leftJoin("profile", "follow.friend_id", "profile.id").where("follow.user_id", req.params.id).select("profile.nickname", "profile.user_id", "profile.image");
+router.get("/follow/:user_id", async (req, res) => {
+    const ourid = user_id_to_id(req.params.user_id)
+    if (ourid == undefined) {
+        return res.status(404).json({ msg: "존재하지 않는 유저입니다" });
+    }
+    const list = await knex("follow").leftJoin("profile", "follow.friend_id", "profile.id").where("follow.user_id", ourid).select("profile.nickname", "profile.user_id", "profile.image");
     res.json(list);
 })
 
-router.get("/follower/:id", async (req, res) => {
+router.get("/follower/:user_id", async (req, res) => {
+    const ourid = user_id_to_id(req.params.user_id);
+    if (ourid == undefined) {
+        return res.status(404).json({ msg: "존재하지 않는 유저입니다" });
+    }
     const list = await knex("follow").leftJoin("profile", "follow.user_id", "profile.id").where("follow.friend_id", req.params.id).select("profile.nickname", "profile.user_id", "profile.image");
     res.json(list);
 })
