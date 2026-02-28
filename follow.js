@@ -62,12 +62,15 @@ router.get("/list", async (req, res) => {
 
 router.get("/mutal", async (req, res) => {
     let mutal = 1
-    const ourid = define_id(req.headers.authorization, res);
-    const target_user_id = req.params.user_id;
-    const target_id = user_id_to_id(target_user_id);
+    const ourid = await define_id(req.headers.authorization, res);
+    const target_user_id = req.query.user_id;
+    const target_id = await user_id_to_id(target_user_id);
+    if(target_id == undefined) {
+        return res.status(404).json({ msg: "존재하지 않는 유저입니다" });
+    }
     const test1 = await knex("follow").select("*").where({ "friend_id": ourid, "user_id": target_id }).first();
     const test2 = await knex("follow").select("*").where({ "friend_id": target_id, "user_id": ourid }).first();
-    if (test1.user_id == undefined || test2.user_id == undefined) {
+    if (test1== undefined || test2 == undefined) {
         mutal = 0
     }
     return res.json({ mutal });
