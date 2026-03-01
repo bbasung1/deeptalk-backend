@@ -44,13 +44,17 @@ router.post("/", upload.single("file"), async (req, res) => {
 
             const savedPath = await saveImage(req.file.buffer, filename);
         }
-        let quote = req.body.quote_num
+        let quote = null;
+        let quote_type=null;
         console.log(quote)
         if (req.body.quote_num) {
             try {
-                const {quote_num, ...rest} = await knex(table).select("quote_num").where(`${table}_num`, quote).first();
+                const quote_table=req.body.quote_type=="Jam-Talk" ? "talk" : "think";
+                quote=req.body.quote_num;
+                quote_type=quote_table=="talk" ? 0 : 1;
+                const {quote_num, ...rest} = await knex(quote_table).select("quote_num").where(`${quote_table}_num`, req.body.quote_num).first();
                 console.log(quote_num);
-                await knex(table).update({ "quote_num": quote_num + 1 }).where(`${table}_num`, quote);
+                await knex(quote_table).update({ "quote_num": quote_num + 1 }).where(`${quote_table}_num`, req.body.quote_num);
             } catch(err) {
                 console.error(err);
                 return res.status(500).json({ msg: "인용 과정에서 문제가 발생했습니다." })
@@ -64,7 +68,8 @@ router.post("/", upload.single("file"), async (req, res) => {
             subject: subject,
             reported: 0, // 기본값: 신고되지 않음
             photo: filename,
-            quote
+            quote,
+            quote_type
         });
 
         res.status(201).json({ success: true, message: "글이 성공적으로 등록되었습니다." });
