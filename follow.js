@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id } = require("./general.js");
+const { define_id, user_id_to_id } = require("./general.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -14,18 +14,19 @@ router.use(
     )
 );
 
-router.post("/:id", async (req, res) => {
+router.post("/:user_id", async (req, res) => {
     const ourid = await define_id(req.headers.authorization, res);
     if (!ourid) {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }
+    const friend_id = await user_id_to_id(req.params.user_id)
     const [dupcheck] = await knex("follow").select("*").where({ user_id: ourid, friend_id: req.params.id })
     console.log(dupcheck);
     const trx = await knex.transaction();
     console.log(dupcheck);
     if (dupcheck != undefined) {
         try {
-            await trx("follow").where({ friend_id: req.params.id, user_id: ourid }).del();
+            await trx("follow").where({ friend_id: friend_id, user_id: ourid }).del();
             await trx.commit();
             return res.json({ success: 1, msg: "북마크 해제 완료" });
         } catch (err) {
@@ -34,7 +35,7 @@ router.post("/:id", async (req, res) => {
         }
     }
     try {
-        await trx("follow").insert({ user_id: ourid, friend_id: req.params.id });
+        await trx("follow").insert({ user_id: ourid, friend_id: friend_id });
         await trx.commit();
         return res.json({ success: 1, msg: "북마크 완료" });
     } catch (err) {
