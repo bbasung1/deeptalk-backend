@@ -155,11 +155,17 @@ async function add_nickname(id) {
     return nickname.nickname;
 }
 async function id_to_user_id(id) {
+    if (id == undefined) {
+        return null;
+    }
     user_id_data = await knex("profile").select("user_id").where("id", id).first();
     return user_id_data.user_id
 }
 
 async function user_id_to_id(user_id) {
+    if (user_id == undefined) {
+        return null;
+    }
     id_data = await knex("profile").select("id").where("user_id", user_id).first();
     return id_data.id
 }
