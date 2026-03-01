@@ -20,7 +20,8 @@ router.post("/:user_id", async (req, res) => {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }
     const friend_id = await user_id_to_id(req.params.user_id)
-    const [dupcheck] = await knex("follow").select("*").where({ user_id: ourid, friend_id: req.params.id })
+    console.log(friend_id);
+    const [dupcheck] = await knex("follow").select("*").where({ user_id: ourid, friend_id })
     console.log(dupcheck);
     const trx = await knex.transaction();
     console.log(dupcheck);
@@ -28,7 +29,7 @@ router.post("/:user_id", async (req, res) => {
         try {
             await trx("follow").where({ friend_id: friend_id, user_id: ourid }).del();
             await trx.commit();
-            return res.json({ success: 1, msg: "북마크 해제 완료" });
+            return res.json({ success: 1, msg: "팔로우 해제 완료" });
         } catch (err) {
             console.error(err);
             return res.json({ success: 0 });
@@ -37,7 +38,7 @@ router.post("/:user_id", async (req, res) => {
     try {
         await trx("follow").insert({ user_id: ourid, friend_id: friend_id });
         await trx.commit();
-        return res.json({ success: 1, msg: "북마크 완료" });
+        return res.json({ success: 1, msg: "팔로우 완료" });
     } catch (err) {
         console.error(err);
         return res.json({ success: 0 });
