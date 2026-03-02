@@ -21,7 +21,7 @@ router.use(express.json());
 router.post("/", upload.single("file"), async (req, res) => {
     const { mode, header, subject } = req.body;
 
-    if ( !mode || !header || !subject) {
+    if (!mode || !header || !subject) {
         return res.status(400).json({ success: false, message: "모든 필드를 입력해주세요." });
     }
 
@@ -32,7 +32,6 @@ router.post("/", upload.single("file"), async (req, res) => {
     try {
         const writer_id = await convert_our_id(req.headers.authorization, res);  // 내부 ID로 변환
         // profile.user_id를 user.id로로
-
         if (!writer_id) {
             return res.status(404).json({ success: false, message: "user_id에 해당하는 profile이 없습니다." });
         }
@@ -45,22 +44,22 @@ router.post("/", upload.single("file"), async (req, res) => {
             const savedPath = await saveImage(req.file.buffer, filename);
         }
         let quote = null;
-        let quote_type=null;
+        let quote_type = null;
         console.log(quote)
         if (req.body.quote_num) {
             try {
-                const quote_table=req.body.quote_type=="Jam-Talk" ? "talk" : "think";
-                quote=req.body.quote_num;
-                quote_type=quote_table=="talk" ? 0 : 1;
-                const {quote_num, ...rest} = await knex(quote_table).select("quote_num").where(`${quote_table}_num`, req.body.quote_num).first();
+                const quote_table = req.body.quote_type == "Jam-Talk" ? "talk" : "think";
+                quote = req.body.quote_num;
+                quote_type = quote_table == "talk" ? 0 : 1;
+                const { quote_num, ...rest } = await knex(quote_table).select("quote_num").where(`${quote_table}_num`, req.body.quote_num).first();
                 console.log(quote_num);
                 await knex(quote_table).update({ "quote_num": quote_num + 1 }).where(`${quote_table}_num`, req.body.quote_num);
-            } catch(err) {
-                console.error(err);
+            } catch (err) {
+                console.error("인용 과정에서 문제가 발생했습니다");
                 return res.status(500).json({ msg: "인용 과정에서 문제가 발생했습니다." })
             }
         }
-        const user_id=await id_to_user_id(writer_id);
+        const user_id = await id_to_user_id(writer_id);
         await knex(table).insert({
             writer_id: writer_id,
             user_id: user_id,
