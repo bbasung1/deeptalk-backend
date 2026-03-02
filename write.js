@@ -48,9 +48,9 @@ router.post("/", upload.single("file"), async (req, res) => {
         console.log(quote)
         if (req.body.quote_num) {
             try {
-                const quote_table = req.body.quote_type == "Jam-Talk" ? "talk" : "think";
+                const quote_table = req.body.quote_type == "Jam-Talk" ? "talk" : (req.body.quote_type == "Jin-Talk" ? "think" : "comment");
                 quote = req.body.quote_num;
-                quote_type = quote_table == "talk" ? 0 : 1;
+                quote_type = quote_table == "talk" ? 0 : (quote_table == "think" ? 1 : 2);
                 const { quote_num, ...rest } = await knex(quote_table).select("quote_num").where(`${quote_table}_num`, req.body.quote_num).first();
                 console.log(quote_num);
                 await knex(quote_table).update({ "quote_num": quote_num + 1 }).where(`${quote_table}_num`, req.body.quote_num);

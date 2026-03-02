@@ -80,4 +80,12 @@ router.get("/like/:type/:post_id", async (req, res) => {
 
 });
 
+router.get("/comment/:comment_id", async (req, res) => {
+    const content = await knex("comment").select("*", "comment_num AS comment_id").where("comment_num", req.params.comment_id).first();
+    if (content) {
+        delete content.comment_num;
+    }
+    res.json(content);
+});
+
 module.exports = router;
