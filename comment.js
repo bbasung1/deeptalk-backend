@@ -97,9 +97,6 @@ router.get("/", async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "유효하지 않은 type 또는 post_num입니다.",
-                type,
-                post_num,
-                origin: req.query.post_num
             });
         }
 
