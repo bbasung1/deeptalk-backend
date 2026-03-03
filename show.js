@@ -74,7 +74,7 @@ router.get("/follower/:user_id", async (req, res) => {
 })
 
 router.get("/like/:type/:post_id", async (req, res) => {
-    const type = req.params.type == "free" ? 0 : 1;
+    const type = req.params.type == "free" ? 0 : (req.params.type == "serious" ? 1 : 2);
     const list = await knex("post_like").leftJoin("profile", "post_like.user_id", "profile.id").where({ "post_like.type": type, "post_like.post_id": req.params.post_id }).select("profile.nickname", "profile.user_id", "profile.image");
     res.json(list);
 
@@ -87,5 +87,16 @@ router.get("/comment/:comment_id", async (req, res) => {
     }
     res.json(content);
 });
+
+router.get("/quotes/:type/:post_id", async (req, res) => {
+    const type = req.params.type == "free" ? 0 : (req.params.type == "serious" ? 1 : 2);
+    const [list1, list2, list3] = await Promise.all([
+        knex("talk").where({ quote_type: type, quote: req.params.post_id }).select('*'),
+        knex("think").where({ quote_type: type, quote: req.params.post_id }).select('*'),
+        knex("comment").where({ quote_type: type, quote: req.params.post_id }).select('*')
+    ]);
+    res.json([...list1, ...list2, ...list3]);
+});
+
 
 module.exports = router;
