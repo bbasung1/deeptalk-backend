@@ -1,8 +1,18 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
+const { define_id, user_id_to_id } = require('./general.js');
 
 router.use(express.json());
+
+const { stream } = require("./log.js");
+const morgan = require("morgan");
+router.use(
+    morgan(
+        "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
+        { stream: stream }
+    )
+);
 
 // 댓글 작성하기
 router.post("/", async (req, res) => {
@@ -86,7 +96,7 @@ router.get("/", async (req, res) => {
         if (![0, 1].includes(type) || isNaN(post_num)) {
             return res.status(400).json({
                 success: false,
-                message: "유효하지 않은 type 또는 post_num입니다."
+                message: "유효하지 않은 type 또는 post_num입니다.",
             });
         }
 
@@ -110,22 +120,22 @@ router.get("/", async (req, res) => {
         //  댓글 쿼리 생성(준비)
         const commentQuery = knex("comment")
             .select(
-                "comment_id",
+                "comment_num AS comment_id",
                 "user_id",
                 "subject",
                 "likes",
-                "quotes",
+                "quote_num AS quotes",
                 "bookmarks",
                 "timestamp",
-                knex.raw("(likes * 2 + quotes * 3.5 + bookmarks * 2) AS popularity") // 가상의 Column
+                knex.raw("(likes * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity") // 가상의 Column
             )
             .where({ type, post_num });
 
         //  정렬 조건 추가
         if (sort === "popular") {
             commentQuery
-            .orderBy("popularity", "desc")      // 인기도 높은 순
-            .orderBy("timestamp", "desc");      // 인기도 같으면 최신순
+                .orderBy("popularity", "desc")      // 인기도 높은 순
+                .orderBy("timestamp", "desc");      // 인기도 같으면 최신순
         } else {
             commentQuery.orderBy("timestamp", "desc"); // 최신순
         }
@@ -148,57 +158,72 @@ router.get("/", async (req, res) => {
     }
 });
 
-
+router.delete("/:comment_id", async (req, res) => {
+    const id = await define_id(req.headers.authorization, res);
+    const comment_data = await knex("comment").select("user_id").where("comment_id", req.params.comment_id).first();
+    const comment_writer_id = await user_id_to_id(comment_data.user_id);
+    if (id != comment_writer_id) {
+        console.log(id);
+        console.log(comment_data.user_id);
+        return res.status(403).json({ "msg": "삭제 권한이 없습니다", "success": 0 })
+    }
+    try {
+        await knex("comment").where("comment_id", req.params.comment_id).delete();
+        return res.json({ "success": 1 })
+    } catch {
+        return res.status(500).json({ "success": 0, "msg": "삭제 과정에서 오류가 발생했습니다" });
+    }
+})
 
 // 공용 업데이트 함수
 async function updateCount(res, comment_id, field, increment) {
-  try {
-    // 먼저 현재 수치 확인
-    const comment = await knex("comment").where("comment_id", comment_id).first();
-    if (!comment) {
-      return res.status(404).json({ success: false, message: "댓글을 찾을 수 없습니다." });
+    try {
+        // 먼저 현재 수치 확인
+        const comment = await knex("comment").where("comment_num", comment_id).first();
+        if (!comment) {
+            return res.status(404).json({ success: false, message: "댓글을 찾을 수 없습니다." });
+        }
+
+        const currentValue = comment[field];
+        const newValue = Math.max(0, currentValue + increment); // 0 미만 방지
+
+        await knex("comment")
+            .where("comment_num", comment_id)
+            .update({ [field]: newValue });
+
+        return res.json({
+            success: true,
+            message: `${field} ${increment > 0 ? "증가" : "감소"} 완료`,
+            [`new_${field}`]: newValue
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ success: false, message: "서버 오류" });
     }
-
-    const currentValue = comment[field];
-    const newValue = Math.max(0, currentValue + increment); // 0 미만 방지
-
-    await knex("comment")
-      .where("comment_id", comment_id)
-      .update({ [field]: newValue });
-
-    return res.json({
-      success: true,
-      message: `${field} ${increment > 0 ? "증가" : "감소"} 완료`,
-      [`new_${field}`]: newValue
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ success: false, message: "서버 오류" });
-  }
 }
 
 // likes
 router.patch("/:comment_id/likes/increase", (req, res) => {
-  updateCount(res, req.params.comment_id, "likes", 1);
+    updateCount(res, req.params.comment_id, "likes", 1);
 });
 router.patch("/:comment_id/likes/decrease", (req, res) => {
-  updateCount(res, req.params.comment_id, "likes", -1);
+    updateCount(res, req.params.comment_id, "likes", -1);
 });
 
 // quotes
 router.patch("/:comment_id/quotes/increase", (req, res) => {
-  updateCount(res, req.params.comment_id, "quotes", 1);
+    updateCount(res, req.params.comment_id, "quotes", 1);
 });
 router.patch("/:comment_id/quotes/decrease", (req, res) => {
-  updateCount(res, req.params.comment_id, "quotes", -1);
+    updateCount(res, req.params.comment_id, "quotes", -1);
 });
 
 // bookmarks
 router.patch("/:comment_id/bookmarks/increase", (req, res) => {
-  updateCount(res, req.params.comment_id, "bookmarks", 1);
+    updateCount(res, req.params.comment_id, "bookmarks", 1);
 });
 router.patch("/:comment_id/bookmarks/decrease", (req, res) => {
-  updateCount(res, req.params.comment_id, "bookmarks", -1);
+    updateCount(res, req.params.comment_id, "bookmarks", -1);
 });
 
 
