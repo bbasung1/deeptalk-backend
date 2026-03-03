@@ -179,7 +179,7 @@ router.delete("/:comment_id", async (req, res) => {
 async function updateCount(res, comment_id, field, increment) {
     try {
         // 먼저 현재 수치 확인
-        const comment = await knex("comment").where("comment_id", comment_id).first();
+        const comment = await knex("comment").where("comment_num", comment_id).first();
         if (!comment) {
             return res.status(404).json({ success: false, message: "댓글을 찾을 수 없습니다." });
         }
@@ -188,7 +188,7 @@ async function updateCount(res, comment_id, field, increment) {
         const newValue = Math.max(0, currentValue + increment); // 0 미만 방지
 
         await knex("comment")
-            .where("comment_id", comment_id)
+            .where("comment_num", comment_id)
             .update({ [field]: newValue });
 
         return res.json({
