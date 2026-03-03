@@ -96,7 +96,7 @@ router.get("/", async (req, res) => {
         if (![0, 1].includes(type) || isNaN(post_num)) {
             return res.status(400).json({
                 success: false,
-                message: "유효하지 않은 type 또는 post_num입니다."
+                message: "유효하지 않은 type 또는 post_num입니다.",
             });
         }
 
@@ -120,14 +120,14 @@ router.get("/", async (req, res) => {
         //  댓글 쿼리 생성(준비)
         const commentQuery = knex("comment")
             .select(
-                "comment_id",
+                "comment_num AS comment_id",
                 "user_id",
                 "subject",
                 "likes",
-                "quotes",
+                "quote_num AS quotes",
                 "bookmarks",
                 "timestamp",
-                knex.raw("(likes * 2 + quotes * 3.5 + bookmarks * 2) AS popularity") // 가상의 Column
+                knex.raw("(likes * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity") // 가상의 Column
             )
             .where({ type, post_num });
 
@@ -179,7 +179,7 @@ router.delete("/:comment_id", async (req, res) => {
 async function updateCount(res, comment_id, field, increment) {
     try {
         // 먼저 현재 수치 확인
-        const comment = await knex("comment").where("comment_id", comment_id).first();
+        const comment = await knex("comment").where("comment_num", comment_id).first();
         if (!comment) {
             return res.status(404).json({ success: false, message: "댓글을 찾을 수 없습니다." });
         }
@@ -188,7 +188,7 @@ async function updateCount(res, comment_id, field, increment) {
         const newValue = Math.max(0, currentValue + increment); // 0 미만 방지
 
         await knex("comment")
-            .where("comment_id", comment_id)
+            .where("comment_num", comment_id)
             .update({ [field]: newValue });
 
         return res.json({
