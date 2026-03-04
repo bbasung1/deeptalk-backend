@@ -81,7 +81,7 @@ router.get("/like/:type/:post_id", async (req, res) => {
 });
 
 router.get("/comment/:comment_id", async (req, res) => {
-    const content = await knex("comment").select("*", "comment_num AS comment_id").where("comment_num", req.params.comment_id).first();
+    const content = await knex("comment").leftJoin("profile", "comment.user_id", "profile.user_id").select("comment.*", "comment_num AS comment_id", "profile.nickname", "profile.image").where("comment_num", req.params.comment_id).first();
     if (content) {
         delete content.comment_num;
     }
