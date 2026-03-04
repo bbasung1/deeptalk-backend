@@ -167,6 +167,9 @@ async function user_id_to_id(user_id) {
         return null;
     }
     id_data = await knex("profile").select("id").where("user_id", user_id).first();
+    if (id_data.id == undefined) {
+        return null;
+    }
     return id_data.id
 }
 
