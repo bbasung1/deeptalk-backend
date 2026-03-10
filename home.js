@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, add_nickname, user_id_to_id } = require("./general.js");
+const { define_id, add_nickname, user_id_to_id, isfollowandbookmark } = require("./general.js");
 
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -27,7 +27,7 @@ router.get("/Jam-Talk", async (req, res) => {
     res.json(talk);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "서버오류발생" });
+    return res.status(500).json({ error: "서버오류발생" });
   }
 });
 
@@ -54,7 +54,7 @@ async function resort_post(type, ourid) {
   const likesWeight = 1.2;
   const bookmarksWeight = 1.0;
   const viewsWeight = 1.0;
-
+  const type_code = type == "talk" ? 0 : (type == "think" ? 1 : 2)
   const rawEngagementScoreSQL = `
         LOG(1 + 
             (comment * ${commentsWeight}) + 
@@ -90,7 +90,8 @@ async function resort_post(type, ourid) {
     .select(
       'p.*',
       "profile.nickname",
-      "profile.image as profile_image"
+      "profile.image as profile_image",
+      ...isfollowandbookmark(ourid, type, type_code)
     )
     // .orderBy(knex.raw(rawFinalScoreSQL), 'desc');
     .orderByRaw(`${rawFreshnessScoreSQL} DESC`);

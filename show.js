@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { user_id_to_id } = require("./general.js");
+const { user_id_to_id, isfollowandbookmark } = require("./general.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -24,20 +24,6 @@ router.get("/follow/:user_id", async (req, res) => {
 })
 
 router.get("/follower/:user_id", async (req, res) => {
-    // const ourid = await user_id_to_id(req.params.user_id);
-    // if (ourid == undefined) {
-    //     return res.status(404).json({ msg: "존재하지 않는 유저입니다" });
-    // }
-    // const list = await knex("follow").leftJoin("profile", "follow.user_id", "profile.id").where("follow.friend_id", ourid).select("profile.nickname", "profile.user_id", "profile.image");
-    // for (i of list) {
-    //     const target_id = user_id_to_id(i.user_id);
-    //     const is_follow = await knex("follow").select("*").where({ "friend_id": ourid, "user_id": target_id }).first();
-    //     i.is_follow = 0
-    //     if (is_follow != undefined) {
-    //         i.is_follow = 1
-    //     }
-    // }
-    // res.json(list);
     try {
         const ourid = await user_id_to_id(req.params.user_id);
 
@@ -91,9 +77,9 @@ router.get("/comment/:comment_id", async (req, res) => {
 router.get("/quotes/:type/:post_id", async (req, res) => {
     const type = req.params.type == "free" ? 0 : (req.params.type == "serious" ? 1 : 2);
     const [list1, list2, list3] = await Promise.all([
-        knex("talk").where({ quote_type: type, quote: req.params.post_id }).select('*'),
-        knex("think").where({ quote_type: type, quote: req.params.post_id }).select('*'),
-        knex("comment").where({ quote_type: type, quote: req.params.post_id }).select('*')
+        knex("talk").where({ quote_type: type, quote: req.params.post_id }).select('talk.*', ...isfollowandbookmark(null, "talk", 0)),
+        knex("think").where({ quote_type: type, quote: req.params.post_id }).select('*', ...isfollowandbookmark(null, "think", 1)),
+        knex("comment").where({ quote_type: type, quote: req.params.post_id }).select('*', ...isfollowandbookmark(null, "comment", 2))
     ]);
     res.json([...list1, ...list2, ...list3]);
 });

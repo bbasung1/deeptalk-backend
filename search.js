@@ -5,6 +5,7 @@ const knex = require("./knex.js");
 
 const { stream } = require("./log.js");
 const morgan = require("morgan");
+const { user_id_to_id, isfollowandbookmark } = require("./general.js");
 router.use(
     morgan(
         "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
@@ -16,8 +17,11 @@ router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
 router.post("/", async (req, res) => {
-    let user_id = req.body.id;
-    let id = await defind_id(user_id, res);
+    let tmp = req.headers.authorization;
+    let id = null;
+    if (tmp) {
+        id = await defind_id(tmp, res);
+    }
     if (req.body.type == "talk") {
         const talk = await knex('talk')
             .whereNotIn('writer_id', function () {
@@ -29,7 +33,7 @@ router.post("/", async (req, res) => {
                 this.where('header', 'like', `%${req.body.searchparam}%`)
                     .orWhere('subject', 'like', `%${req.body.searchparam}%`);
             })
-            .select('*');
+            .select('talk.*', ...isfollowandbookmark(id, "talk", 0));
         res.json(talk);
     }
     if (req.body.type == "think") {
@@ -43,7 +47,7 @@ router.post("/", async (req, res) => {
                 this.where('header', 'like', `%${req.body.searchparam}%`)
                     .orWhere('subject', 'like', `%${req.body.searchparam}%`);
             })
-            .select('*');
+            .select('think.*', ...isbookmarkandfollow(id, "think", 1));
         res.json(think);
     }
     if (req.body.type == "user") {
