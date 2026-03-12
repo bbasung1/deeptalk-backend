@@ -9,6 +9,7 @@ router.use(express.urlencoded({ extended: true }));
 const { stream } = require("./log.js");
 const morgan = require("morgan");
 const { profile } = require("winston");
+const { post } = require("./search.js");
 router.use(
   morgan(
     "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
@@ -21,8 +22,9 @@ router.get("/Jam-Talk", async (req, res) => {
   try {
     const ourid = await define_id(req.headers.authorization, res);
     if (!ourid) return res.json({ error: "인증 실패" }); // 인증 실패 시 종료
+    const page = req.query.page || 0;
 
-    const talk = await resort_post("talk", ourid);
+    const talk = await resort_post("talk", ourid, page);
 
     res.json(talk);
   } catch (err) {
@@ -36,8 +38,9 @@ router.get("/Jin-Talk", async (req, res) => {
   try {
     const ourid = await define_id(req.headers.authorization, res);
     if (!ourid) return; // 인증 실패 시 종료
+    const page = parseInt(req.query.page) || 0;
 
-    const think = await resort_post("think", ourid)
+    const think = await resort_post("think", ourid, page);
 
     res.json(think);
   } catch (err) {
@@ -46,7 +49,7 @@ router.get("/Jin-Talk", async (req, res) => {
   }
 });
 
-async function resort_post(type, ourid) {
+async function resort_post(type, ourid, page) {
   const halfLifeHours = 24;
   const weightEngagement = 1.0;
   const commentsWeight = 2.0;
@@ -94,8 +97,12 @@ async function resort_post(type, ourid) {
       ...isfollowandbookmark(ourid, type, type_code)
     )
     // .orderBy(knex.raw(rawFinalScoreSQL), 'desc');
-    .orderByRaw(`${rawFreshnessScoreSQL} DESC`);
-  return posts
+    .orderByRaw(`${rawFreshnessScoreSQL} DESC`)
+    .limit(10)
+    .offset(page * 10);
+  // test = parseInt(page) + 1
+  return posts;
+  // return { data: posts, next_page: test };
 }
 
 module.exports = router;

@@ -18,6 +18,7 @@ router.use(express.urlencoded({ extended: true }));
 
 router.post("/", async (req, res) => {
     let tmp = req.headers.authorization;
+    const page = req.body.page || 0;
     let id = null;
     if (tmp) {
         id = await defind_id(tmp, res);
@@ -33,7 +34,8 @@ router.post("/", async (req, res) => {
                 this.where('header', 'like', `%${req.body.searchparam}%`)
                     .orWhere('subject', 'like', `%${req.body.searchparam}%`);
             })
-            .select('talk.*', ...isfollowandbookmark(id, "talk", 0));
+            .select('talk.*', ...isfollowandbookmark(id, "talk", 0))
+            .limit(10).offset(page * 10);
         res.json(talk);
     }
     if (req.body.type == "think") {
@@ -47,7 +49,9 @@ router.post("/", async (req, res) => {
                 this.where('header', 'like', `%${req.body.searchparam}%`)
                     .orWhere('subject', 'like', `%${req.body.searchparam}%`);
             })
-            .select('think.*', ...isbookmarkandfollow(id, "think", 1));
+            .select('think.*', ...isbookmarkandfollow(id, "think", 1))
+            .limit(10)
+            .offset(page * 10);;
         res.json(think);
     }
     if (req.body.type == "user") {
@@ -59,9 +63,12 @@ router.post("/", async (req, res) => {
             })
             .andWhere(function () {
                 this.where('user_id', 'like', `%${req.body.searchparam}%`)
-                    .orWhere('nickname', 'like', `%${req.body.searchparam}%`);
+                    .orWhere('nickname', 'like', `%${req.body.searchparam}%`)
+                    ;
             })
-            .select('nickname', 'profile_image', 'status_message', 'user_id');
+            .select('nickname', 'profile_image', 'status_message', 'user_id')
+            .limit(10)
+            .offset(page * 10);
         res.json(user);
     }
 })

@@ -61,7 +61,9 @@ router.get("/follower/:user_id", async (req, res) => {
 
 router.get("/like/:type/:post_id", async (req, res) => {
     const type = req.params.type == "free" ? 0 : (req.params.type == "serious" ? 1 : 2);
-    const list = await knex("post_like").leftJoin("profile", "post_like.user_id", "profile.id").where({ "post_like.type": type, "post_like.post_id": req.params.post_id }).select("profile.nickname", "profile.user_id", "profile.image");
+    const page = req.query.page || 0;
+    const list = await knex("post_like").leftJoin("profile", "post_like.user_id", "profile.id").where({ "post_like.type": type, "post_like.post_id": req.params.post_id }).select("profile.nickname", "profile.user_id", "profile.image").limit(10)
+        .offset(page * 10);
     res.json(list);
 
 });
@@ -76,10 +78,14 @@ router.get("/comment/:comment_id", async (req, res) => {
 
 router.get("/quotes/:type/:post_id", async (req, res) => {
     const type = req.params.type == "free" ? 0 : (req.params.type == "serious" ? 1 : 2);
+    const page = req.query.page || 0;
     const [list1, list2, list3] = await Promise.all([
-        knex("talk").where({ quote_type: type, quote: req.params.post_id }).select('talk.*', ...isfollowandbookmark(null, "talk", 0)),
-        knex("think").where({ quote_type: type, quote: req.params.post_id }).select('*', ...isfollowandbookmark(null, "think", 1)),
-        knex("comment").where({ quote_type: type, quote: req.params.post_id }).select('*', ...isfollowandbookmark(null, "comment", 2))
+        knex("talk").where({ quote_type: type, quote: req.params.post_id }).select('talk.*', ...isfollowandbookmark(null, "talk", 0)).limit(10)
+            .offset(page * 10),
+        knex("think").where({ quote_type: type, quote: req.params.post_id }).select('*', ...isfollowandbookmark(null, "think", 1)).limit(10)
+            .offset(page * 10),
+        knex("comment").where({ quote_type: type, quote: req.params.post_id }).select('*', ...isfollowandbookmark(null, "comment", 2)).limit(10)
+            .offset(page * 10)
     ]);
     res.json([...list1, ...list2, ...list3]);
 });
