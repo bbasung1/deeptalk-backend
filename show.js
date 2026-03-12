@@ -69,7 +69,7 @@ router.get("/like/:type/:post_id", async (req, res) => {
 });
 
 router.get("/comment/:comment_id", async (req, res) => {
-    const content = await knex("comment").leftJoin("profile", "comment.user_id", "profile.user_id").select("comment.*", "comment_num AS comment_id", "profile.nickname", "profile.image").where("comment_num", req.params.comment_id).first();
+    const content = await knex("comment as p").leftJoin("profile", "p.user_id", "profile.user_id").select("p.*", "p.comment_num AS comment_id", "profile.nickname", "profile.image").where("p.comment_num", req.params.comment_id).first();
     if (content) {
         delete content.comment_num;
     }
@@ -80,11 +80,11 @@ router.get("/quotes/:type/:post_id", async (req, res) => {
     const type = req.params.type == "free" ? 0 : (req.params.type == "serious" ? 1 : 2);
     const page = req.query.page || 0;
     const [list1, list2, list3] = await Promise.all([
-        knex("talk").where({ quote_type: type, quote: req.params.post_id }).select('talk.*', ...isfollowandbookmark(null, "talk", 0)).limit(10)
+        knex("talk as p").where({ quote_type: type, quote: req.params.post_id }).select('p.*', ...isfollowandbookmark(null, "talk", 0)).limit(10)
             .offset(page * 10),
-        knex("think").where({ quote_type: type, quote: req.params.post_id }).select('*', ...isfollowandbookmark(null, "think", 1)).limit(10)
+        knex("think as p").where({ quote_type: type, quote: req.params.post_id }).select('p.*', ...isfollowandbookmark(null, "think", 1)).limit(10)
             .offset(page * 10),
-        knex("comment").where({ quote_type: type, quote: req.params.post_id }).select('*', ...isfollowandbookmark(null, "comment", 2)).limit(10)
+        knex("comment as p").where({ quote_type: type, quote: req.params.post_id }).select('p.*', ...isfollowandbookmark(null, "comment", 2)).limit(10)
             .offset(page * 10)
     ]);
     res.json([...list1, ...list2, ...list3]);

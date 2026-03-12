@@ -24,32 +24,32 @@ router.post("/", async (req, res) => {
         id = await defind_id(tmp, res);
     }
     if (req.body.type == "talk") {
-        const talk = await knex('talk')
-            .whereNotIn('writer_id', function () {
+        const talk = await knex('talk as p')
+            .whereNotIn('p.writer_id', function () {
                 this.select('blocked_user_id')
                     .from('block_list')
                     .where('user_id', id);
             })
             .andWhere(function () {
-                this.where('header', 'like', `%${req.body.searchparam}%`)
-                    .orWhere('subject', 'like', `%${req.body.searchparam}%`);
+                this.where('p.header', 'like', `%${req.body.searchparam}%`)
+                    .orWhere('p.subject', 'like', `%${req.body.searchparam}%`);
             })
-            .select('talk.*', ...isfollowandbookmark(id, "talk", 0))
+            .select('p.*', ...isfollowandbookmark(id, "talk", 0))
             .limit(10).offset(page * 10);
         res.json(talk);
     }
     if (req.body.type == "think") {
-        const think = await knex('think')
-            .whereNotIn('writer_id', function () {
+        const think = await knex('think as p')
+            .whereNotIn('p.writer_id', function () {
                 this.select('blocked_user_id')
                     .from('block_list')
                     .where('user_id', id);
             })
             .andWhere(function () {
-                this.where('header', 'like', `%${req.body.searchparam}%`)
-                    .orWhere('subject', 'like', `%${req.body.searchparam}%`);
+                this.where('p.header', 'like', `%${req.body.searchparam}%`)
+                    .orWhere('p.subject', 'like', `%${req.body.searchparam}%`);
             })
-            .select('think.*', ...isbookmarkandfollow(id, "think", 1))
+            .select('p.*', ...isfollowandbookmark(id, "think", 1))
             .limit(10)
             .offset(page * 10);;
         res.json(think);

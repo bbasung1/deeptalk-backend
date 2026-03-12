@@ -123,7 +123,7 @@ router.get("/", async (req, res) => {
         }
 
         //  댓글 쿼리 생성(준비)
-        const commentQuery = knex("comment")
+        const commentQuery = knex("comment as p")
             .select(
                 "comment_num AS comment_id",
                 "user_id",
