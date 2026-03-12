@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, user_id_to_id } = require('./general.js');
+const { define_id, user_id_to_id, isfollowandbookmark } = require('./general.js');
 
 router.use(express.json());
 
@@ -88,8 +88,13 @@ router.post("/", async (req, res) => {
 
 router.get("/", async (req, res) => {
     try {
+        let id = null;
+        if (req.headers.authorization) {
+            id = await define_id(req.headers.authorization, res);
+        }
         const type = parseInt(req.query.type);
         const post_num = parseInt(req.query.post_num);
+        const page = parseInt(req.query.page) || 0;
         const sort = req.query.sort || "latest";
 
         //  유효성 검사
@@ -127,7 +132,8 @@ router.get("/", async (req, res) => {
                 "quote_num AS quotes",
                 "bookmarks",
                 "timestamp",
-                knex.raw("(likes * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity") // 가상의 Column
+                knex.raw("(likes * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity"),
+                ...isfollowandbookmark(id, "comment", 2) // 가상의 Column
             )
             .where({ type, post_num });
 
@@ -139,6 +145,7 @@ router.get("/", async (req, res) => {
         } else {
             commentQuery.orderBy("timestamp", "desc"); // 최신순
         }
+        commentQuery.limit(10).offset(page * 10); // 페이지당 10개 댓글
 
         //  Knex 쿼리를 실제로 실행해서 결과를 가져오는 코드
         const comments = await commentQuery;
