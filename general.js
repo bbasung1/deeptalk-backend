@@ -175,11 +175,11 @@ async function user_id_to_id(user_id) {
 
 const isfollowandbookmark = (id, type_name, type_code) => [
     knex.raw(
-        `EXISTS(SELECT 1 FROM post_like AS f2 WHERE f2.user_id = ? AND f2.post_id = p.${type_name}_num AND f2.type = ?) AS is_like`,
+        `EXISTS(SELECT 1 FROM post_like AS f2 WHERE f2.user_id = ? AND f2.post_id = ${type_name}_num AND f2.type = ?) AS is_like`,
         [id, type_code]
     ),
     knex.raw(
-        `EXISTS(SELECT 1 FROM bookmark AS f3 WHERE f3.user_id = ? AND f3.post_id = p.${type_name}_num AND f3.type = ?) AS is_bookmark`,
+        `EXISTS(SELECT 1 FROM bookmark AS f3 WHERE f3.user_id = ? AND f3.post_id = ${type_name}_num AND f3.type = ?) AS is_bookmark`,
         [id, type_code]
     )
 ];
