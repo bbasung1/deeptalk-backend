@@ -24,25 +24,29 @@ router.post("/:id", async (req, res) => {
     const trx = await knex.transaction();
     const type = req.body.type == 0 ? "talk" : "think";
     const num_name = type + "_num";
-    const [brf_bookmark] = await knex(type).select("mylist").where(num_name, req.params.id);
+    // const [brf_bookmark] = await knex(type).select("mylist").where(num_name, req.params.id);
     console.log(dupcheck);
     if (dupcheck != undefined) {
         try {
             await trx("bookmark").where({ type: req.body.type, post_id: req.params.id, user_id: ourid }).del();
-            await trx(type).update({ mylist: brf_bookmark.mylist - 1 }).where(num_name, req.params.id);
+            await trx(type).decrement("mylist", 1).where(num_name, req.params.id);
             await trx.commit();
-            return res.json({ success: 1, msg: "북마크 해제 완료" });
+            const output = trx(type).select("mylist").where(num_name, req.params.id).first();
+            return res.json({ success: 1, msg: "북마크 해제 완료", bookmark: output.mylist });
         } catch (err) {
+            trx.rollback()
             console.error(err);
             return res.json({ success: 0 });
         }
     }
     try {
         await trx("bookmark").insert({ user_id: ourid, type: req.body.type, post_id: req.params.id });
-        await trx(type).update({ mylist: brf_bookmark.mylist + 1 }).where(num_name, req.params.id);
+        await trx(type).increment("mylist", 1).where(num_name, req.params.id);
         await trx.commit();
-        return res.json({ success: 1, msg: "북마크 완료" });
+        const output = trx(type).select("mylist").where(num_name, req.params.id).first();
+        return res.json({ success: 1, msg: "북마크 완료", bookmark: output.mylist });
     } catch (err) {
+        trx.rollback();
         console.error(err);
         return res.json({ success: 0 });
     }
