@@ -18,23 +18,27 @@ router.use(
 
 router.post("/", async (req, res) => {
     let user_id = req.body.user_id;
+    const page = req.body.page || 0;
     let id = await user_id_to_id(user_id);
     if (req.body.type == "talk") {
         const talk = await knex('talk')
             .where('writer_id', id)
-            .select('*');
+            .select('*').limit(10)
+            .offset(page * 10);
         res.json(talk);
     }
     if (req.body.type == "think") {
         const think = await knex('think')
             .where('writer_id', id)
-            .select('*');
+            .select('*').limit(10)
+            .offset(page * 10);
         res.json(think);
     }
     if (req.body.type == "comment") {
         const user = await knex('comment')
             .where('user_id', id)
-            .select("*");
+            .select("*").limit(10)
+            .offset(page * 10);
         res.json(user);
     }
 })

@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { add_nickname, define_id } = require("./general.js");
+const { add_nickname, define_id, isfollowandbookmark } = require("./general.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -22,18 +22,18 @@ router.get("/:id", async (req, res) => {
         id = await define_id(user_id, res);
     };
     try {
-        [talk] = await knex('talk')
-            .leftJoin("profile", "talk.writer_id", "profile.id")
-            .whereNotIn('talk.writer_id', function () {
+        [talk] = await knex('talk as p')
+            .leftJoin("profile", "p.writer_id", "profile.id")
+            .whereNotIn('p.writer_id', function () {
                 this.select('blocked_user_id')
                     .from('block_list')
                     .where('user_id', id);
             })
-            .where("talk.talk_num", req.params.id)
-            .select('talk.*', "profile.nickname");
+            .where("p.talk_num", req.params.id)
+            .select('p.*', "profile.nickname", ...isfollowandbookmark(id, "talk", 0));
         if (talk == undefined) {
             return res.json({ msg: "없거나 비공개인 포스트 입니다" })
-        }
+        } 1
         talk.views = talk.views + 1;
         await knex("talk").where("talk_num", req.params.id).update({ views: talk.views });
         return res.json(talk);

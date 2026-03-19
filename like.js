@@ -24,26 +24,31 @@ router.post("/:id", async (req, res) => {
     const trx = await knex.transaction();
     const type = req.body.type == 0 ? "talk" : "think";
     const num_name = type + "_num";
-    const [brf_like] = await knex(type).select("like").where(num_name, req.params.id);
-    console.log(dupcheck);
+    // const [brf_like] = await knex(type).select("like").where(num_name, req.params.id);
+    // console.log(dupcheck);
     if (dupcheck != undefined) {
         try {
             await trx("post_like").where({ type: req.body.type, post_id: req.params.id, user_id: ourid }).del();
-            await trx(type).update({ like: brf_like.like - 1 }).where(num_name, req.params.id);
+            // await trx(type).update({ like: brf_like.like - 1 }).where(num_name, req.params.id);
+            await trx(type).where(num_name, req.params.id).decrement("like", 1);
             await trx.commit();
-            return res.json({ success: 1, msg: "좋아요 해제 완료" });
+            const output = await knex(tableName).select("like").where(num_name, req.params.id).first();
+            return res.json({ success: 1, msg: "좋아요 해제 완료", like: output.like });
         } catch (err) {
+            trx.rollback();
             console.error(err);
             return res.json({ success: 0 });
         }
     }
-    console.log(brf_like);
+    // console.log(brf_like);
     try {
         await trx("post_like").insert({ user_id: ourid, type: req.body.type, post_id: req.params.id });
-        await trx(type).update({ like: brf_like.like + 1 }).where(num_name, req.params.id);
+        await trx(type).where(num_name, req.params.id).increment("like", 1);
         await trx.commit();
-        return res.json({ success: 1, msg: "좋아요 완료" });
+        const output = await knex(tableName).select("like").where(num_name, req.params.id).first();
+        return res.json({ success: 1, msg: "좋아요 완료", like: output.like });
     } catch (err) {
+        trx.rollback();
         console.error(err);
         return res.json({ success: 0 });
     }

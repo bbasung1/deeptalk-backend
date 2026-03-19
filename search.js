@@ -5,6 +5,7 @@ const knex = require("./knex.js");
 
 const { stream } = require("./log.js");
 const morgan = require("morgan");
+const { user_id_to_id, isfollowandbookmark } = require("./general.js");
 router.use(
     morgan(
         "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
@@ -16,34 +17,41 @@ router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
 router.post("/", async (req, res) => {
-    let user_id = req.body.id;
-    let id = await defind_id(user_id, res);
+    let tmp = req.headers.authorization;
+    const page = req.body.page || 0;
+    let id = null;
+    if (tmp) {
+        id = await defind_id(tmp, res);
+    }
     if (req.body.type == "talk") {
-        const talk = await knex('talk')
-            .whereNotIn('writer_id', function () {
+        const talk = await knex('talk as p')
+            .whereNotIn('p.writer_id', function () {
                 this.select('blocked_user_id')
                     .from('block_list')
                     .where('user_id', id);
             })
             .andWhere(function () {
-                this.where('header', 'like', `%${req.body.searchparam}%`)
-                    .orWhere('subject', 'like', `%${req.body.searchparam}%`);
+                this.where('p.header', 'like', `%${req.body.searchparam}%`)
+                    .orWhere('p.subject', 'like', `%${req.body.searchparam}%`);
             })
-            .select('*');
+            .select('p.*', ...isfollowandbookmark(id, "talk", 0))
+            .limit(10).offset(page * 10);
         res.json(talk);
     }
     if (req.body.type == "think") {
-        const think = await knex('think')
-            .whereNotIn('writer_id', function () {
+        const think = await knex('think as p')
+            .whereNotIn('p.writer_id', function () {
                 this.select('blocked_user_id')
                     .from('block_list')
                     .where('user_id', id);
             })
             .andWhere(function () {
-                this.where('header', 'like', `%${req.body.searchparam}%`)
-                    .orWhere('subject', 'like', `%${req.body.searchparam}%`);
+                this.where('p.header', 'like', `%${req.body.searchparam}%`)
+                    .orWhere('p.subject', 'like', `%${req.body.searchparam}%`);
             })
-            .select('*');
+            .select('p.*', ...isfollowandbookmark(id, "think", 1))
+            .limit(10)
+            .offset(page * 10);;
         res.json(think);
     }
     if (req.body.type == "user") {
@@ -55,9 +63,12 @@ router.post("/", async (req, res) => {
             })
             .andWhere(function () {
                 this.where('user_id', 'like', `%${req.body.searchparam}%`)
-                    .orWhere('nickname', 'like', `%${req.body.searchparam}%`);
+                    .orWhere('nickname', 'like', `%${req.body.searchparam}%`)
+                    ;
             })
-            .select('nickname', 'profile_image', 'status_message', 'user_id');
+            .select('nickname', 'profile_image', 'status_message', 'user_id')
+            .limit(10)
+            .offset(page * 10);
         res.json(user);
     }
 })
