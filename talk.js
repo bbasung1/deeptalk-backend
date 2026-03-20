@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { add_nickname, define_id, isfollowandbookmark } = require("./general.js");
+const { decrement_quote_num, define_id, isfollowandbookmark } = require("./general.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -46,19 +46,24 @@ router.get("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
     const id_token = req.headers.authorization;
     const id = await define_id(id_token, res);
-    console.log(id);
-    console.log(req.params.id);
-    writer_id = await knex("talk").select("*").where("talk_num", req.params.id).first();
-    console.log(writer_id);
-    if (id != writer_id.writer_id) {
+    const trx = await knex.transaction();
+    post_info = await knex("talk").select("*").where("talk_num", req.params.id).first();
+    if (id != post_info.writer_id) {
         return res.status(403).json({ "msg": "삭제 권한이 없습니다", "code": "4101" })
     }
+    const senddata = { success: 1 }
     try {
-        await knex("talk").where("talk_num", req.params.id).delete();
-        return res.json({ "success": 1 })
-    } catch {
-        return res.status(500).json({ "success": 0 });
+        await trx("talk").where("talk_num", req.params.id).delete();
+        if (post_info.quote) {
+            senddata.quote_num = await decrement_quote_num(post_info, trx);
+        }
+        trx.commit();
+        return res.json(senddata)
+    } catch (err) {
+        trx.rollback();
+        console.error(err);
+        senddata.success = 0;
+        return res.status(500).json(senddata);
     }
 })
-
 module.exports = router;

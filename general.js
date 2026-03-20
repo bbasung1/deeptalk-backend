@@ -184,6 +184,14 @@ const isfollowandbookmark = (id, type_name, type_code) => [
     )
 ];
 
+async function decrement_quote_num(post_info, trx) {
+    const type = post_info.quote_type == 0 ? "talk" : (post_info.quote_type == 1 ? "think" : "comment");
+    const type_num = type + "_num";
+    await trx(type).where(type_num, post_info.quote).decrement("quote_num", 1);
+    const [new_quote_num] = await trx(type).where(type_num, post_info.quote).select("quote_num");
+    return new_quote_num.quote_num;
+}
+
 module.exports = {
     convert_our_id,
     define_id,
@@ -194,6 +202,7 @@ module.exports = {
     id_to_user_id,
     user_id_to_id,
     isfollowandbookmark,
+    decrement_quote_num,
     typeMap,
     TYPE_BLOCK,
     TYPE_MUTE,
