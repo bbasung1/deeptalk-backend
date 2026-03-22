@@ -57,11 +57,14 @@ router.delete("/:id", async (req, res) => {
     }
     try {
         await trx("think").where("think_num", req.params.id).delete();
+        console.log(post_info);
         if (post_info.quote) {
-            senddata.quote_num = await decrement_quote_num(post_info, trx);
+            let quote_num = await decrement_quote_num(post_info, trx);
         }
         await trx.commit();
-        return res.json(senddata);
+        const output = { success: 1, quote_num };
+        console.log(output);
+        return res.json(output);
     } catch (err) {
         await trx.rollback();
         senddata.success = 0;
