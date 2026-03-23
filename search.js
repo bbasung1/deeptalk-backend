@@ -68,7 +68,7 @@ router.post("/", async (req, res) => {
                     .orWhere('nickname', 'like', `%${req.body.searchparam}%`)
                     ;
             })
-            .select('nickname', 'image as profile_image', 'status_message', 'user_id')
+            .select('nickname', 'image as profile_image', 'user_id', knex.raw("EXISTS (SELECT 1 FROM follow WHERE user_id = ? AND friend_id = profile.id) AS is_follow", [id]))
             .limit(10)
             .offset(page * 10);
         res.json(user);
