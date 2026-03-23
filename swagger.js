@@ -5,7 +5,7 @@ const doc = {
     title: 'My API',
     description: '자동으로 생성된 Swagger 문서입니다.'
   },
-  host: 'https://jamdeeptalk.com', // 실제 서버 포트에 맞게 수정
+  host: 'jamdeeptalk.com', // 실제 서버 포트에 맞게 수정
   schemes: ['https']
 };
 

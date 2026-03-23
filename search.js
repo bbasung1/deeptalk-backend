@@ -5,7 +5,7 @@ const knex = require("./knex.js");
 
 const { stream } = require("./log.js");
 const morgan = require("morgan");
-const { user_id_to_id, isfollowandbookmark } = require("./general.js");
+const { user_id_to_id, islikeandbookmark } = require("./general.js");
 router.use(
     morgan(
         "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
@@ -35,7 +35,7 @@ router.post("/", async (req, res) => {
                     .orWhere('p.subject', 'like', `%${req.body.searchparam}%`);
             })
             .leftJoin("profile", "p.writer_id", "profile.id")
-            .select('p.*', 'profile.nickname', 'profile.image as profile_image', ...isfollowandbookmark(id, "talk", 0))
+            .select('p.*', 'profile.nickname', 'profile.image as profile_image', ...islikeandbookmark(id, "talk", 0))
             .limit(10).offset(page * 10);
         res.json(talk);
     }
@@ -51,7 +51,7 @@ router.post("/", async (req, res) => {
                     .orWhere('p.subject', 'like', `%${req.body.searchparam}%`);
             })
             .leftJoin("profile", "p.writer_id", "profile.id")
-            .select('p.*', 'profile.nickname', 'profile.image as profile_image', ...isfollowandbookmark(id, "think", 1))
+            .select('p.*', 'profile.nickname', 'profile.image as profile_image', ...islikeandbookmark(id, "think", 1))
             .limit(10)
             .offset(page * 10);;
         res.json(think);

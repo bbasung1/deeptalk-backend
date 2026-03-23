@@ -173,7 +173,7 @@ async function user_id_to_id(user_id) {
     return id_data.id
 }
 
-const isfollowandbookmark = (id, type_name, type_code) => [
+const islikeandbookmark = (id, type_name, type_code) => [
     knex.raw(
         `EXISTS(SELECT 1 FROM post_like AS f2 WHERE f2.user_id = ? AND f2.post_id = ${type_name}_num AND f2.type = ?) AS is_like`,
         [id, type_code]
@@ -201,7 +201,7 @@ module.exports = {
     add_nickname,
     id_to_user_id,
     user_id_to_id,
-    isfollowandbookmark,
+    islikeandbookmark,
     decrement_quote_num,
     typeMap,
     TYPE_BLOCK,

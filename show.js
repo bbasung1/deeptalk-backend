@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { user_id_to_id, isfollowandbookmark } = require("./general.js");
+const { user_id_to_id, islikeandbookmark } = require("./general.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -80,11 +80,11 @@ router.get("/quotes/:type/:post_id", async (req, res) => {
     const type = req.params.type == "free" ? 0 : (req.params.type == "serious" ? 1 : 2);
     const page = req.query.page || 0;
     const [list1, list2, list3] = await Promise.all([
-        knex("talk as p").where({ quote_type: type, quote: req.params.post_id }).select('p.*', ...isfollowandbookmark(null, "talk", 0)).limit(10)
+        knex("talk as p").where({ quote_type: type, quote: req.params.post_id }).select('p.*', ...islikeandbookmark(null, "talk", 0)).limit(10)
             .offset(page * 10),
-        knex("think as p").where({ quote_type: type, quote: req.params.post_id }).select('p.*', ...isfollowandbookmark(null, "think", 1)).limit(10)
+        knex("think as p").where({ quote_type: type, quote: req.params.post_id }).select('p.*', ...islikeandbookmark(null, "think", 1)).limit(10)
             .offset(page * 10),
-        knex("comment as p").where({ quote_type: type, quote: req.params.post_id }).select('p.*', ...isfollowandbookmark(null, "comment", 2)).limit(10)
+        knex("comment as p").where({ quote_type: type, quote: req.params.post_id }).select('p.*', ...islikeandbookmark(null, "comment", 2)).limit(10)
             .offset(page * 10)
     ]);
     res.json([...list1, ...list2, ...list3]);
