@@ -34,7 +34,8 @@ router.post("/", async (req, res) => {
                 this.where('p.header', 'like', `%${req.body.searchparam}%`)
                     .orWhere('p.subject', 'like', `%${req.body.searchparam}%`);
             })
-            .select('p.*', ...isfollowandbookmark(id, "talk", 0))
+            .leftJoin("profile", "p.writer_id", "profile.id")
+            .select('p.*', 'profile.nickname', 'profile.image as profile_image', ...isfollowandbookmark(id, "talk", 0))
             .limit(10).offset(page * 10);
         res.json(talk);
     }
@@ -49,7 +50,8 @@ router.post("/", async (req, res) => {
                 this.where('p.header', 'like', `%${req.body.searchparam}%`)
                     .orWhere('p.subject', 'like', `%${req.body.searchparam}%`);
             })
-            .select('p.*', ...isfollowandbookmark(id, "think", 1))
+            .leftJoin("profile", "p.writer_id", "profile.id")
+            .select('p.*', 'profile.nickname', 'profile.image as profile_image', ...isfollowandbookmark(id, "think", 1))
             .limit(10)
             .offset(page * 10);;
         res.json(think);
