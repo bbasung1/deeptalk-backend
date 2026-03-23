@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, user_id_to_id, isfollowandbookmark } = require('./general.js');
+const { define_id, user_id_to_id, islikeandbookmark } = require('./general.js');
 
 router.use(express.json());
 
@@ -133,7 +133,7 @@ router.get("/", async (req, res) => {
                 "bookmarks",
                 "timestamp",
                 knex.raw("(likes * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity"),
-                ...isfollowandbookmark(id, "comment", 2) // 가상의 Column
+                ...islikeandbookmark(id, "comment", 2) // 가상의 Column
             )
             .where({ type, post_num });
 

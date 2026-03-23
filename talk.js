@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { decrement_quote_num, define_id, isfollowandbookmark } = require("./general.js");
+const { decrement_quote_num, define_id, islikeandbookmark } = require("./general.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -30,7 +30,7 @@ router.get("/:id", async (req, res) => {
                     .where('user_id', id);
             })
             .where("p.talk_num", req.params.id)
-            .select('p.*', "profile.nickname", ...isfollowandbookmark(id, "talk", 0));
+            .select('p.*', "profile.nickname", ...islikeandbookmark(id, "talk", 0));
         if (talk == undefined) {
             return res.json({ msg: "없거나 비공개인 포스트 입니다" })
         } 1
