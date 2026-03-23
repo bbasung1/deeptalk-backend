@@ -68,7 +68,7 @@ router.post("/", async (req, res) => {
                     .orWhere('nickname', 'like', `%${req.body.searchparam}%`)
                     ;
             })
-            .select('nickname', 'profile_image', 'status_message', 'user_id')
+            .select('nickname', 'image as profile_image', 'status_message', 'user_id')
             .limit(10)
             .offset(page * 10);
         res.json(user);
