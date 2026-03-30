@@ -21,7 +21,7 @@ router.post("/:id", async (req, res) => {
     const [dupcheck] = await knex("post_like").select("*").where({ type: req.body.type, user_id: ourid, post_id: req.params.id })
     console.log(dupcheck);
     const trx = await knex.transaction();
-    const type = req.body.type == 0 ? "talk" : "think";
+    const type = req.body.type == 0 ? "talk" : (req.body.type == 1 ? "think" : "comment");
     const num_name = type + "_num";
     // const [brf_like] = await knex(type).select("like").where(num_name, req.params.id);
     // console.log(dupcheck);
@@ -31,11 +31,13 @@ router.post("/:id", async (req, res) => {
             // await trx(type).update({ like: brf_like.like - 1 }).where(num_name, req.params.id);
             await trx(type).where(num_name, req.params.id).decrement("like", 1);
             await trx.commit();
-            const output = await knex(tableName).select("like").where(num_name, req.params.id).first();
+            const output = await knex(type).select("like").where(num_name, req.params.id).first();
+            console.log("삭제output:", output)
             return res.json({ success: 1, msg: "좋아요 해제 완료", like: output.like });
         } catch (err) {
             trx.rollback();
             console.error(err);
+            console.log("삭제 에러")
             return res.json({ success: 0 });
         }
     }
@@ -44,10 +46,12 @@ router.post("/:id", async (req, res) => {
         await trx("post_like").insert({ user_id: ourid, type: req.body.type, post_id: req.params.id });
         await trx(type).where(num_name, req.params.id).increment("like", 1);
         await trx.commit();
-        const output = await knex(tableName).select("like").where(num_name, req.params.id).first();
+        const output = await knex(type).select("like").where(num_name, req.params.id).first();
+        console.log("추가output:", output)
         return res.json({ success: 1, msg: "좋아요 완료", like: output.like });
     } catch (err) {
         trx.rollback();
+        console.log("추가 에러");
         console.error(err);
         return res.json({ success: 0 });
     }
