@@ -30,7 +30,7 @@ router.get("/:id", async (req, res) => {
                     .where('user_id', id);
             })
             .where("p.talk_num", req.params.id)
-            .select('p.*', "profile.nickname", ...islikeandbookmark(id, "talk", 0));
+            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(id, "talk", 0));
         if (talk == undefined) {
             return res.json({ msg: "없거나 비공개인 포스트 입니다" })
         } 1
