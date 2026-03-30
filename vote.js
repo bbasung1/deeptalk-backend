@@ -18,9 +18,9 @@ router.use(
 router.get("/:id", async (req, res) => {
     const our_id = await define_id(req.headers.authorization, res);
     let [already_vote] = await knex("vote_count").select("*").where({ "vote_num": req.params.id, "our_id": our_id })
-    if (already_vote == undefined) {
+    let [vote_info] = await knex("vote").select("*").where("vote_num", req.params.id);
+    if (already_vote == undefined || new Date(vote_info.end_date) < new Date()) {
         try {
-            let [vote_info] = await knex("vote").select("*").where("vote_num", req.params.id);
             delete vote_info.vote_num;
             delete vote_info.post_type;
             delete vote_info.post_num;
