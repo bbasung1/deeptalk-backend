@@ -58,6 +58,7 @@ router.post("/:id", async (req, res) => {
         delete result.vote_num;
         delete result.post_type;
         delete result.post_num;
+        result.success = 1;
         await trx.commit();
         return res.json(result);
     } catch (err) {
