@@ -30,7 +30,7 @@ router.get("/:id", async (req, res) => {
                     .where('user_id', id);
             })
             .where("p.talk_num", req.params.id)
-            .select('p.*', "profile.nickname", ...islikeandbookmark(id, "talk", 0));
+            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(id, "talk", 0));
         if (talk == undefined) {
             return res.json({ msg: "없거나 비공개인 포스트 입니다" })
         } 1
@@ -47,7 +47,7 @@ router.delete("/:id", async (req, res) => {
     const id_token = req.headers.authorization;
     const id = await define_id(id_token, res);
     const trx = await knex.transaction();
-    post_info = await knex("talk").select("*").where("talk_num", req.params.id).first();
+    post_info = await knex("talk").select("quote", "quote_type", "vote", "writer_id").where("talk_num", req.params.id).first();
     if (id != post_info.writer_id) {
         return res.status(403).json({ "msg": "삭제 권한이 없습니다", "code": "4101" })
     }
@@ -56,6 +56,15 @@ router.delete("/:id", async (req, res) => {
         await trx("talk").where("talk_num", req.params.id).delete();
         if (post_info.quote) {
             senddata.quote_num = await decrement_quote_num(post_info, trx);
+        }
+        if (post_info.vote) {
+            try {
+                await trx("vote").where({ vote_num: post_info.vote }).delete();
+            } catch (err) {
+                console.error(err);
+                trx.rollback();
+                return res.status(500).json({ success: 0, message: "투표 삭제 과정에서 문제가 발생했습니다." });
+            }
         }
         trx.commit();
         return res.json(senddata)
