@@ -16,9 +16,10 @@ router.use(
 
 // 댓글 작성하기
 router.post("/", async (req, res) => {
-    const { user_id, type, post_num, subject } = req.body;
+    const { type, post_num, subject } = req.body;
+    const our_id = await define_id(req.headers.authorization, res);
 
-    if (!user_id || type === undefined || post_num === undefined || !subject) {
+    if (!our_id || type === undefined || post_num === undefined || !subject) {
         return res.status(400).json({
             success: false,
             message: "user_id, type, post_num, subject 모두 필요합니다."
@@ -51,8 +52,8 @@ router.post("/", async (req, res) => {
 
         // 댓글 작성자의 user_id 존재 확인 (profile 테이블에서)
         const user = await knex("profile")
-            .where("user_id", user_id)
-            .select(knex.raw("1"))
+            .where("id", our_id)
+            .select("user_id")
             .first();
 
         if (!user) {
@@ -61,13 +62,12 @@ router.post("/", async (req, res) => {
                 message: "댓글 작성자 user_id가 존재하지 않습니다."
             });
         }
-
         // 댓글 삽입
         await knex("comment").insert({
             type,
             post_num,
             subject,
-            user_id
+            user_id: user.user_id
         });
 
         res.status(201).json({

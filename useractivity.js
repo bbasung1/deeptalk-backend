@@ -23,21 +23,24 @@ router.post("/", async (req, res) => {
     if (req.body.type == "talk") {
         const talk = await knex('talk')
             .where('writer_id', id)
-            .select('*', ...islikeandbookmark(id, "talk", 0)).limit(10)
+            .leftJoin("profile", "talk.writer_id", "profile.id")
+            .select('talk.*', ...islikeandbookmark(id, "talk", 0), "profile.nickname", "profile.image as profile_image").limit(10)
             .offset(page * 10);
         res.json(talk);
     }
     if (req.body.type == "think") {
         const think = await knex('think')
             .where('writer_id', id)
-            .select('*', ...islikeandbookmark(id, "think", 1)).limit(10)
+            .leftJoin("profile", "think.writer_id", "profile.id")
+            .select('think.*', ...islikeandbookmark(id, "think", 1), "profile.nickname", "profile.image as profile_image").limit(10)
             .offset(page * 10);
         res.json(think);
     }
     if (req.body.type == "comment") {
         const user = await knex('comment')
-            .where('user_id', id)
-            .select("*", ...islikeandbookmark(id, "comment", 2)).limit(10)
+            .where('comment.user_id', user_id)
+            .leftJoin("profile", "comment.user_id", "profile.user_id")
+            .select("comment.*", ...islikeandbookmark(id, "comment", 2), "profile.nickname", "profile.image as profile_image").limit(10)
             .offset(page * 10);
         res.json(user);
     }
