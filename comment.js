@@ -124,14 +124,17 @@ router.get("/", async (req, res) => {
 
         //  댓글 쿼리 생성(준비)
         const commentQuery = knex("comment as p")
+        .leftJoin("profile","p.user_id","profile.user_id")
             .select(
                 "comment_num AS comment_id",
-                "user_id",
+                "p.user_id as user_id",
                 "subject",
                 "likes",
                 "quote_num AS quotes",
                 "bookmarks",
                 "timestamp",
+                "profile.nickname",
+                "profile.image as profile_image",
                 knex.raw("(likes * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity"),
                 ...islikeandbookmark(id, "comment", 2) // 가상의 Column
             )
