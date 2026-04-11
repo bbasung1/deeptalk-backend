@@ -3,6 +3,8 @@ const router = express.Router();
 const knex = require("./knex.js");
 const convert_our_id = require('./general.js').define_id;
 const id_to_user_id = require('./general.js').id_to_user_id;
+const add_nickname = require('./general.js').add_nickname;
+const { sendPostNotification } = require('./fcm.js');
 const multer = require("multer");
 const upload = multer();
 const { saveImage, generateFilename } = require("./utils/imageSaver");
@@ -100,6 +102,10 @@ router.post("/", upload.single("file"), async (req, res) => {
         }
         await trx.commit();
         res.status(201).json({ success: true, message: "글이 성공적으로 등록되었습니다." });
+
+        // 팔로워에게 FCM 알림 발송 (응답 블로킹 방지를 위해 await 생략)
+        const nickname = await add_nickname(writer_id);
+        sendPostNotification(writer_id, nickname, mode);
     } catch (err) {
         await trx.rollback();
         console.error(err);

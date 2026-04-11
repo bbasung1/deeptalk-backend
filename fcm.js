@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
 const { define_id, user_id_to_id } = require('./general.js');
+const admin = require("firebase-admin");
 
 router.use(express.json());
 
@@ -13,6 +14,46 @@ router.use(
         { stream: stream }
     )
 );
+
+if (!admin.apps.length) {
+    admin.initializeApp({
+        credential: admin.credential.cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+        }),
+    });
+}
+
+async function sendPostNotification(writer_id, nickname, mode) {
+    try {
+        // follow와 fcm_token을 JOIN하여 팔로워들의 FCM 토큰 조회
+        const followerTokens = await knex("follow")
+            .join("fcm_token", "follow.user_id", "=", "fcm_token.our_id")
+            .where("follow.friend_id", writer_id)
+            .select("fcm_token.fcm_token", "fcm_token.type");
+
+        if (followerTokens.length === 0) return;
+
+        // 모든 토큰 객체 추출 (토큰과 타입 정보 포함)
+        const tokens = followerTokens.map(record => record.fcm_token);
+
+        const postType = mode === "Jam-Talk" ? "자유" : "진대";
+
+        const message = {
+            notification: {
+                title: `${nickname}님이 새 ${postType}글을 작성했습니다.`,
+                body: "지금 확인해보세요!",
+            },
+            tokens,
+        };
+
+        const response = await admin.messaging().sendEachForMulticast(message);
+        console.log(`FCM 알림 발송 완료 - 성공: ${response.successCount}, 실패: ${response.failureCount}`);
+    } catch (err) {
+        console.error("FCM 알림 발송 실패:", err);
+    }
+}
 
 router.post("/token", async (req, res) => {
     const our_id = await define_id(req.headers.authorization, res);
@@ -33,3 +74,4 @@ router.post("/token", async (req, res) => {
 })
 
 module.exports = router;
+module.exports.sendPostNotification = sendPostNotification;
