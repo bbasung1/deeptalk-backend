@@ -50,6 +50,7 @@ async function sendPostNotification(writer_id, nickname, mode) {
 
         const response = await admin.messaging().sendEachForMulticast(message);
         console.log(`FCM 알림 발송 완료 - 성공: ${response.successCount}, 실패: ${response.failureCount}`);
+        console.log("FCM 응답:", response);
     } catch (err) {
         console.error("FCM 알림 발송 실패:", err);
     }
@@ -71,6 +72,11 @@ router.post("/token", async (req, res) => {
         console.error(err);
         return res.status(500).json({ success: 0, message: "서버 내부 오류가 발생했습니다." });
     }
+})
+
+router.get("/test", async (req, res) => {
+    await sendPostNotification(1, "테스트", "Jam-Talk");
+    res.json({ success: 1, message: "테스트 알림 발송 완료" });
 })
 
 module.exports = router;
