@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id } = require("./general.js");
+const { define_id, user_id_to_id } = require("./general.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -14,29 +14,31 @@ router.use(
     )
 );
 
-router.post("/:id", async (req, res) => {
+router.post("/:user_id", async (req, res) => {
     const ourid = await define_id(req.headers.authorization, res);
     if (!ourid) {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }
-    const [dupcheck] = await knex("follow").select("*").where({ user_id: ourid, friend_id: req.params.id })
+    const friend_id = await user_id_to_id(req.params.user_id)
+    console.log(friend_id);
+    const [dupcheck] = await knex("follow").select("*").where({ user_id: ourid, friend_id })
     console.log(dupcheck);
     const trx = await knex.transaction();
     console.log(dupcheck);
     if (dupcheck != undefined) {
         try {
-            await trx("follow").where({ friend_id: req.params.id, user_id: ourid }).del();
+            await trx("follow").where({ friend_id: friend_id, user_id: ourid }).del();
             await trx.commit();
-            return res.json({ success: 1, msg: "북마크 해제 완료" });
+            return res.json({ success: 1, msg: "팔로우 해제 완료" });
         } catch (err) {
             console.error(err);
             return res.json({ success: 0 });
         }
     }
     try {
-        await trx("follow").insert({ user_id: ourid, friend_id: req.params.id });
+        await trx("follow").insert({ user_id: ourid, friend_id: friend_id });
         await trx.commit();
-        return res.json({ success: 1, msg: "북마크 완료" });
+        return res.json({ success: 1, msg: "팔로우 완료" });
     } catch (err) {
         console.error(err);
         return res.json({ success: 0 });
@@ -58,6 +60,23 @@ router.get("/list", async (req, res) => {
         this.select("friend_id").from("follow").where({ user_id: ourid });
     });
     return res.json(list);
+});
+
+router.get("/is_follow", async (req, res) => {
+    let mutal = 1
+    const ourid = await define_id(req.headers.authorization, res);
+    const target_user_id = req.query.user_id;
+    const target_id = await user_id_to_id(target_user_id);
+    if (target_id == undefined) {
+        return res.status(404).json({ msg: "존재하지 않는 유저입니다" });
+    }
+    // const test1 = await knex("follow").select("*").where({ "friend_id": ourid, "user_id": target_id }).first();
+    const test2 = await knex("follow").select("*").where({ "friend_id": target_id, "user_id": ourid }).first();
+    if (test2 == undefined) {
+        mutal = 0
+    }
+    return res.json({ mutal });
+
 });
 
 module.exports = router;

@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, user_id_to_id } = require('./general.js');
+const { define_id, user_id_to_id, islikeandbookmark } = require('./general.js');
 
 router.use(express.json());
 
@@ -16,9 +16,10 @@ router.use(
 
 // 댓글 작성하기
 router.post("/", async (req, res) => {
-    const { user_id, type, post_num, subject } = req.body;
+    const { type, post_num, subject } = req.body;
+    const our_id = await define_id(req.headers.authorization, res);
 
-    if (!user_id || type === undefined || post_num === undefined || !subject) {
+    if (!our_id || type === undefined || post_num === undefined || !subject) {
         return res.status(400).json({
             success: false,
             message: "user_id, type, post_num, subject 모두 필요합니다."
@@ -51,8 +52,8 @@ router.post("/", async (req, res) => {
 
         // 댓글 작성자의 user_id 존재 확인 (profile 테이블에서)
         const user = await knex("profile")
-            .where("user_id", user_id)
-            .select(knex.raw("1"))
+            .where("id", our_id)
+            .select("user_id")
             .first();
 
         if (!user) {
@@ -61,13 +62,12 @@ router.post("/", async (req, res) => {
                 message: "댓글 작성자 user_id가 존재하지 않습니다."
             });
         }
-
         // 댓글 삽입
         await knex("comment").insert({
             type,
             post_num,
             subject,
-            user_id
+            user_id: user.user_id
         });
 
         res.status(201).json({
@@ -88,15 +88,20 @@ router.post("/", async (req, res) => {
 
 router.get("/", async (req, res) => {
     try {
+        let id = null;
+        if (req.headers.authorization) {
+            id = await define_id(req.headers.authorization, res);
+        }
         const type = parseInt(req.query.type);
         const post_num = parseInt(req.query.post_num);
+        const page = parseInt(req.query.page) || 0;
         const sort = req.query.sort || "latest";
 
         //  유효성 검사
         if (![0, 1].includes(type) || isNaN(post_num)) {
             return res.status(400).json({
                 success: false,
-                message: "유효하지 않은 type 또는 post_num입니다."
+                message: "유효하지 않은 type 또는 post_num입니다.",
             });
         }
 
@@ -118,16 +123,20 @@ router.get("/", async (req, res) => {
         }
 
         //  댓글 쿼리 생성(준비)
-        const commentQuery = knex("comment")
+        const commentQuery = knex("comment as p")
+        .leftJoin("profile","p.user_id","profile.user_id")
             .select(
-                "comment_id",
-                "user_id",
+                "comment_num AS comment_id",
+                "p.user_id as user_id",
                 "subject",
-                "likes",
-                "quotes",
+                "like",
+                "quote_num AS quotes",
                 "bookmarks",
                 "timestamp",
-                knex.raw("(likes * 2 + quotes * 3.5 + bookmarks * 2) AS popularity") // 가상의 Column
+                "profile.nickname",
+                "profile.image as profile_image",
+                knex.raw("(`like` * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity"),
+                ...islikeandbookmark(id, "comment", 2) // 가상의 Column
             )
             .where({ type, post_num });
 
@@ -139,6 +148,7 @@ router.get("/", async (req, res) => {
         } else {
             commentQuery.orderBy("timestamp", "desc"); // 최신순
         }
+        commentQuery.limit(10).offset(page * 10); // 페이지당 10개 댓글
 
         //  Knex 쿼리를 실제로 실행해서 결과를 가져오는 코드
         const comments = await commentQuery;
@@ -179,7 +189,7 @@ router.delete("/:comment_id", async (req, res) => {
 async function updateCount(res, comment_id, field, increment) {
     try {
         // 먼저 현재 수치 확인
-        const comment = await knex("comment").where("comment_id", comment_id).first();
+        const comment = await knex("comment").where("comment_num", comment_id).first();
         if (!comment) {
             return res.status(404).json({ success: false, message: "댓글을 찾을 수 없습니다." });
         }
@@ -188,7 +198,7 @@ async function updateCount(res, comment_id, field, increment) {
         const newValue = Math.max(0, currentValue + increment); // 0 미만 방지
 
         await knex("comment")
-            .where("comment_id", comment_id)
+            .where("comment_num", comment_id)
             .update({ [field]: newValue });
 
         return res.json({

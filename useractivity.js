@@ -8,6 +8,7 @@ router.use(express.urlencoded({ extended: true }));
 
 const { stream } = require("./log.js");
 const morgan = require("morgan");
+const { user_id_to_id, islikeandbookmark } = require("./general.js");
 router.use(
     morgan(
         "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
@@ -16,24 +17,31 @@ router.use(
 );
 
 router.post("/", async (req, res) => {
-    let user_id = req.headers.authorization;
-    let id = await defind_id(user_id, res);
+    let user_id = req.body.user_id;
+    const page = req.body.page || 0;
+    let id = await user_id_to_id(user_id);
     if (req.body.type == "talk") {
         const talk = await knex('talk')
             .where('writer_id', id)
-            .select('*');
+            .leftJoin("profile", "talk.writer_id", "profile.id")
+            .select('talk.*', ...islikeandbookmark(id, "talk", 0), "profile.nickname", "profile.image as profile_image").limit(10)
+            .offset(page * 10);
         res.json(talk);
     }
     if (req.body.type == "think") {
         const think = await knex('think')
             .where('writer_id', id)
-            .select('*');
+            .leftJoin("profile", "think.writer_id", "profile.id")
+            .select('think.*', ...islikeandbookmark(id, "think", 1), "profile.nickname", "profile.image as profile_image").limit(10)
+            .offset(page * 10);
         res.json(think);
     }
     if (req.body.type == "comment") {
         const user = await knex('comment')
-            .where('user_id', id)
-            .select("*");
+            .where('comment.user_id', user_id)
+            .leftJoin("profile", "comment.user_id", "profile.user_id")
+            .select("comment.*", ...islikeandbookmark(id, "comment", 2), "profile.nickname", "profile.image as profile_image").limit(10)
+            .offset(page * 10);
         res.json(user);
     }
 })

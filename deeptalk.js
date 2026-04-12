@@ -23,6 +23,8 @@ try {
     httpsmode = false;
 }
 
+const swaggerUi = require('swagger-ui-express');
+const swaggerFile = require('./swagger-output.json'); // 2단계에서 생성될 파일
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -44,8 +46,11 @@ app.use("/follow", require("./follow.js"));
 app.use("/report", require("./report.js"));
 // app.use("/test", require("./test.js"));
 app.use("/test", require("./test.js"));
+app.use("/show", require("./show.js"));
 app.use("/files", express.static(process.env.FILE_DIR));
-
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerFile));
+app.use("/vote", require("./vote.js"));
+app.use("/fcm", require("./fcm.js"));
 morgan.token("status", function (req, res) {
     let color;
     if (res.statusCode == 404) color = "\x1B[44m";

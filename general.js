@@ -155,13 +155,41 @@ async function add_nickname(id) {
     return nickname.nickname;
 }
 async function id_to_user_id(id) {
+    if (id == undefined) {
+        return null;
+    }
     user_id_data = await knex("profile").select("user_id").where("id", id).first();
     return user_id_data.user_id
 }
 
 async function user_id_to_id(user_id) {
+    if (user_id == undefined) {
+        return null;
+    }
     id_data = await knex("profile").select("id").where("user_id", user_id).first();
+    if (id_data.id == undefined) {
+        return null;
+    }
     return id_data.id
+}
+
+const islikeandbookmark = (id, type_name, type_code) => [
+    knex.raw(
+        `EXISTS(SELECT 1 FROM post_like AS f2 WHERE f2.user_id = ? AND f2.post_id = ${type_name}_num AND f2.type = ?) AS is_like`,
+        [id, type_code]
+    ),
+    knex.raw(
+        `EXISTS(SELECT 1 FROM bookmark AS f3 WHERE f3.user_id = ? AND f3.post_id = ${type_name}_num AND f3.type = ?) AS is_bookmark`,
+        [id, type_code]
+    )
+];
+
+async function decrement_quote_num(post_info, trx) {
+    const type = post_info.quote_type == 0 ? "talk" : (post_info.quote_type == 1 ? "think" : "comment");
+    const type_num = type + "_num";
+    await trx(type).where(type_num, post_info.quote).decrement("quote_num", 1);
+    const [new_quote_num] = await trx(type).where(type_num, post_info.quote).select("quote_num");
+    return new_quote_num.quote_num;
 }
 
 module.exports = {
@@ -173,6 +201,8 @@ module.exports = {
     add_nickname,
     id_to_user_id,
     user_id_to_id,
+    islikeandbookmark,
+    decrement_quote_num,
     typeMap,
     TYPE_BLOCK,
     TYPE_MUTE,
