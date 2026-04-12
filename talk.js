@@ -60,6 +60,8 @@ router.delete("/:id", async (req, res) => {
         }
         if (post_info.vote) {
             try {
+                // vote_count(FK) 먼저 삭제 후 vote 삭제
+                await trx("vote_count").where({ vote_num: post_info.vote }).delete();
                 await trx("vote").where({ vote_num: post_info.vote }).delete();
             } catch (err) {
                 console.error(err);

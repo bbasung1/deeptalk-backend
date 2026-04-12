@@ -92,10 +92,10 @@ router.post("/", upload.single("file"), async (req, res) => {
                     vote_4: req.body.vote.vote_4 || null,
                     vote_5: req.body.vote.vote_5 || null,
                     vote_6: req.body.vote.vote_6 || null,
-                    end_date: toMysqlDatetime(req.body.vote.end_date)
+                    end_date: toKstDatetime(req.body.vote.end_date)
                 })
-                const test=await trx(table).update({ vote: vote_num }).where(`${table}_num`, post_num);
-                console.log("vote 가 진행됬는지 확인:"+test)
+                const test = await trx(table).update({ vote: vote_num }).where(`${table}_num`, post_num);
+                console.log("vote 가 진행됬는지 확인:" + test)
             } catch (err) {
                 await trx.rollback();
                 console.error(err);
@@ -115,9 +115,16 @@ router.post("/", upload.single("file"), async (req, res) => {
     }
 });
 
-function toMysqlDatetime(isoString) {
-  // "2026-04-15T10:12:22.952Z" → "2026-04-15 10:12:22"
-  return new Date(isoString).toISOString().slice(0, 19).replace('T', ' ');
+/**
+ * ISO 문자열(UTC)을 KST(UTC+9) 기준의 MySQL DATETIME 문자열로 변환합니다.
+ * DB 및 NOW()가 KST 기준이므로 저장 시 KST로 맞춰야 시간 비교가 정확합니다.
+ *
+ * "2026-04-15T01:30:00.000Z" → "2026-04-15 10:30:00"  (+9h)
+ */
+function toKstDatetime(isoString) {
+    const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+    const kstDate = new Date(new Date(isoString).getTime() + KST_OFFSET_MS);
+    return kstDate.toISOString().slice(0, 19).replace('T', ' ');
 }
 
 
