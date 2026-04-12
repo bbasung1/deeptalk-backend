@@ -126,9 +126,9 @@ async function attachVoteInfo(posts, userId) {
 function serializePost(post) {
     return {
         // --- 식별 ---
-        id:   post.talk_num ?? post.think_num,
+        id: post.talk_num ?? post.think_num,
         type: post.talk_num != null ? 'talk' : 'think',
-        ...(post.talk_num  != null ? { talk_num:  post.talk_num  } : {}),
+        ...(post.talk_num != null ? { talk_num: post.talk_num } : {}),
         ...(post.think_num != null ? { think_num: post.think_num } : {}),
 
         // --- 게시물 본문 ---
@@ -159,7 +159,7 @@ function serializePost(post) {
         is_bookmark: Boolean(post.is_bookmark),
 
         // ★ 새 필드 추가 시 여기만 수정 ★
-        vote_info: post.vote_info ?? null,
+        vote: post.vote ?? null,
     };
 }
 
