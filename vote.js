@@ -24,6 +24,7 @@ router.get("/:id", async (req, res) => {
             delete vote_info.vote_num;
             delete vote_info.post_type;
             delete vote_info.post_num;
+            console.log(vote_info);
             return res.json(vote_info);
         } catch (err) {
             console.error(err);
@@ -35,6 +36,7 @@ router.get("/:id", async (req, res) => {
         delete vote_info.post_type;
         delete vote_info.post_num;
         vote_info.user_choice = already_vote.point;
+        console.log(vote_info);
         return res.json(vote_info);
     }
 })
