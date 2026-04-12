@@ -22,6 +22,7 @@ router.use(express.json());
 
 router.post("/", upload.single("file"), async (req, res) => {
     const { mode, header, subject } = req.body;
+    console.log(req.body);
     const trx = await knex.transaction();
     if (!mode || !header || !subject) {
         return res.status(400).json({ success: false, message: "모든 필드를 입력해주세요." });
@@ -91,9 +92,10 @@ router.post("/", upload.single("file"), async (req, res) => {
                     vote_4: req.body.vote.vote_4 || null,
                     vote_5: req.body.vote.vote_5 || null,
                     vote_6: req.body.vote.vote_6 || null,
-                    end_date: req.body.vote.end_date
+                    end_date: toMysqlDatetime(req.body.vote.end_date)
                 })
-                await trx(table).update({ vote: vote_num }).where(`${table}_num`, post_num);
+                const test=await trx(table).update({ vote: vote_num }).where(`${table}_num`, post_num);
+                console.log("vote 가 진행됬는지 확인:"+test)
             } catch (err) {
                 await trx.rollback();
                 console.error(err);
@@ -113,6 +115,10 @@ router.post("/", upload.single("file"), async (req, res) => {
     }
 });
 
+function toMysqlDatetime(isoString) {
+  // "2026-04-15T10:12:22.952Z" → "2026-04-15 10:12:22"
+  return new Date(isoString).toISOString().slice(0, 19).replace('T', ' ');
+}
 
 
 module.exports = router;
