@@ -186,7 +186,7 @@ async function buildPostResponse(posts, userId) {
     const isSingle = !Array.isArray(posts);
     const arr = isSingle ? [posts] : posts;
 
-    await attachVoteInfo(arr, userId);
+    // await attachVoteInfo(arr, userId);
 
     const serialized = arr.map(serializePost);
     return isSingle ? serialized[0] : serialized;
