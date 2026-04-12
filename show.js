@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { user_id_to_id, islikeandbookmark } = require("./general.js");
+const { user_id_to_id, islikeandbookmark, define_id } = require("./general.js");
+const { buildPostResponse } = require("./postSerializer.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -79,15 +80,34 @@ router.get("/comment/:comment_id", async (req, res) => {
 router.get("/quotes/:type/:post_id", async (req, res) => {
     const type = req.params.type == "free" ? 0 : (req.params.type == "serious" ? 1 : 2);
     const page = req.query.page || 0;
+
+    // 로그인한 경우 투표 여부 등 사용자 상태 반영
+    let userId = null;
+    if (req.headers.authorization) {
+        userId = await define_id(req.headers.authorization, res);
+    }
+
     const [list1, list2, list3] = await Promise.all([
-        knex("talk as p").where({ quote_type: type, quote: req.params.post_id }).select('p.*', ...islikeandbookmark(null, "talk", 0)).limit(10)
-            .offset(page * 10),
-        knex("think as p").where({ quote_type: type, quote: req.params.post_id }).select('p.*', ...islikeandbookmark(null, "think", 1)).limit(10)
-            .offset(page * 10),
-        knex("comment as p").where({ quote_type: type, quote: req.params.post_id }).select('p.*', ...islikeandbookmark(null, "comment", 2)).limit(10)
-            .offset(page * 10)
+        knex("talk as p")
+            .leftJoin("profile", "p.writer_id", "profile.id")
+            .where({ quote_type: type, quote: req.params.post_id })
+            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "talk", 0))
+            .limit(10).offset(page * 10),
+        knex("think as p")
+            .leftJoin("profile", "p.writer_id", "profile.id")
+            .where({ quote_type: type, quote: req.params.post_id })
+            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "think", 1))
+            .limit(10).offset(page * 10),
+        knex("comment as p")
+            .leftJoin("profile", "p.user_id", "profile.user_id")
+            .where({ quote_type: type, quote: req.params.post_id })
+            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "comment", 2))
+            .limit(10).offset(page * 10),
     ]);
-    res.json([...list1, ...list2, ...list3]);
+
+    // comment는 게시물(talk/think)과 스키마가 달라 별도로 반환
+    const posts = await buildPostResponse([...list1, ...list2], userId);
+    res.json({ posts, comments: list3 });
 });
 
 

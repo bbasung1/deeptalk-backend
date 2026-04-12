@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
 const { add_nickname, define_id, islikeandbookmark, decrement_quote_num } = require("./general.js");
+const { buildPostResponse } = require("./postSerializer.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -36,9 +37,7 @@ router.get("/:id", async (req, res) => {
         }
         think.views = think.views + 1;
         await knex("think").where("think_num", req.params.id).update({ views: think.views });
-        nickname = await add_nickname(think.writer_id);
-        think.nickname = nickname;
-        return res.json(think);
+        return res.json(await buildPostResponse(think, id));
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "서버오류발생" });

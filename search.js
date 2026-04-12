@@ -6,6 +6,7 @@ const knex = require("./knex.js");
 const { stream } = require("./log.js");
 const morgan = require("morgan");
 const { user_id_to_id, islikeandbookmark } = require("./general.js");
+const { buildPostResponse } = require("./postSerializer.js");
 router.use(
     morgan(
         "HTTP/:http-version :method :url :status from :remote-addr response length: :res[content-length] :referrer :user-agent in :response-time ms",
@@ -37,7 +38,7 @@ router.post("/", async (req, res) => {
             .leftJoin("profile", "p.writer_id", "profile.id")
             .select('p.*', 'profile.nickname', 'profile.image as profile_image', ...islikeandbookmark(id, "talk", 0))
             .limit(10).offset(page * 10);
-        res.json(talk);
+        return res.json(await buildPostResponse(talk, id));
     }
     if (req.body.type == "think") {
         const think = await knex('think as p')
@@ -53,8 +54,8 @@ router.post("/", async (req, res) => {
             .leftJoin("profile", "p.writer_id", "profile.id")
             .select('p.*', 'profile.nickname', 'profile.image as profile_image', ...islikeandbookmark(id, "think", 1))
             .limit(10)
-            .offset(page * 10);;
-        res.json(think);
+            .offset(page * 10);
+        return res.json(await buildPostResponse(think, id));
     }
     if (req.body.type == "user") {
         const user = await knex('profile')
