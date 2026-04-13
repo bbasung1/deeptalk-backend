@@ -122,8 +122,11 @@ router.post("/", upload.single("file"), async (req, res) => {
  * "2026-04-15T01:30:00.000Z" → "2026-04-15 10:30:00"  (+9h)
  */
 function toKstDatetime(isoString) {
+    console.log("원본 ISO 문자열:", isoString);
     const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-    const kstDate = new Date(new Date(isoString).getTime() + KST_OFFSET_MS);
+    // const KST_OFFSET_MS = 0;
+    const kstDate = new Date(new Date(isoString).getTime() - KST_OFFSET_MS);
+    console.log("KST DATETIME 문자열:", kstDate.toISOString().slice(0, 19).replace('T', ' '));
     return kstDate.toISOString().slice(0, 19).replace('T', ' ');
 }
 
