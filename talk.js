@@ -23,7 +23,7 @@ router.get("/:id", async (req, res) => {
         id = await define_id(user_id, res);
     };
     try {
-        [talk] = await knex('talk as p')
+        const [talk] = await knex('talk as p')
             .leftJoin("profile", "p.writer_id", "profile.id")
             .whereNotIn('p.writer_id', function () {
                 this.select('blocked_user_id')
