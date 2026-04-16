@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
 const { define_id, add_nickname, user_id_to_id, islikeandbookmark } = require("./general.js");
+const { buildPostResponse } = require("./postSerializer.js");
 
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -26,7 +27,7 @@ router.get("/Jam-Talk", async (req, res) => {
 
     const talk = await resort_post("talk", ourid, page);
 
-    res.json(talk);
+    res.json(await buildPostResponse(talk, ourid));
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "서버오류발생" });
@@ -42,7 +43,7 @@ router.get("/Jin-Talk", async (req, res) => {
 
     const think = await resort_post("think", ourid, page);
 
-    res.json(think);
+    res.json(await buildPostResponse(think, ourid));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "서버오류발생" });

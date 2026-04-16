@@ -3,6 +3,8 @@ const router = express.Router();
 const knex = require("./knex.js");
 const convert_our_id = require('./general.js').define_id;
 const id_to_user_id = require('./general.js').id_to_user_id;
+const add_nickname = require('./general.js').add_nickname;
+const { sendPostNotification } = require('./fcm.js');
 const multer = require("multer");
 const upload = multer();
 const { saveImage, generateFilename } = require("./utils/imageSaver");
@@ -20,6 +22,7 @@ router.use(express.json());
 
 router.post("/", upload.single("file"), async (req, res) => {
     const { mode, header, subject } = req.body;
+    console.log(req.body);
     const trx = await knex.transaction();
     if (!mode || !header || !subject) {
         return res.status(400).json({ success: false, message: "모든 필드를 입력해주세요." });
@@ -89,9 +92,10 @@ router.post("/", upload.single("file"), async (req, res) => {
                     vote_4: req.body.vote.vote_4 || null,
                     vote_5: req.body.vote.vote_5 || null,
                     vote_6: req.body.vote.vote_6 || null,
-                    end_date: req.body.vote.end_date
+                    end_date: toKstDatetime(req.body.vote.end_date)
                 })
-                await trx(table).update({ vote: vote_num }).where(`${table}_num`, post_num);
+                const test = await trx(table).update({ vote: vote_num }).where(`${table}_num`, post_num);
+                console.log("vote 가 진행됬는지 확인:" + test)
             } catch (err) {
                 await trx.rollback();
                 console.error(err);
@@ -100,6 +104,10 @@ router.post("/", upload.single("file"), async (req, res) => {
         }
         await trx.commit();
         res.status(201).json({ success: true, message: "글이 성공적으로 등록되었습니다." });
+
+        // 팔로워에게 FCM 알림 발송 (응답 블로킹 방지를 위해 await 생략)
+        const nickname = await add_nickname(writer_id);
+        sendPostNotification(writer_id, nickname, mode);
     } catch (err) {
         await trx.rollback();
         console.error(err);
@@ -107,6 +115,20 @@ router.post("/", upload.single("file"), async (req, res) => {
     }
 });
 
+/**
+ * ISO 문자열(UTC)을 KST(UTC+9) 기준의 MySQL DATETIME 문자열로 변환합니다.
+ * DB 및 NOW()가 KST 기준이므로 저장 시 KST로 맞춰야 시간 비교가 정확합니다.
+ *
+ * "2026-04-15T01:30:00.000Z" → "2026-04-15 10:30:00"  (+9h)
+ */
+function toKstDatetime(isoString) {
+    console.log("원본 ISO 문자열:", isoString);
+    const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+    // const KST_OFFSET_MS = 0;
+    const kstDate = new Date(new Date(isoString).getTime() - KST_OFFSET_MS);
+    console.log("KST DATETIME 문자열:", kstDate.toISOString().slice(0, 19).replace('T', ' '));
+    return kstDate.toISOString().slice(0, 19).replace('T', ' ');
+}
 
 
 module.exports = router;

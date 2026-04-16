@@ -129,13 +129,13 @@ router.get("/", async (req, res) => {
                 "comment_num AS comment_id",
                 "p.user_id as user_id",
                 "subject",
-                "likes",
+                "like",
                 "quote_num AS quotes",
                 "bookmarks",
                 "timestamp",
                 "profile.nickname",
                 "profile.image as profile_image",
-                knex.raw("(likes * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity"),
+                knex.raw("(`like` * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity"),
                 ...islikeandbookmark(id, "comment", 2) // 가상의 Column
             )
             .where({ type, post_num });
