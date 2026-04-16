@@ -21,9 +21,116 @@ router.use(
 router.use(express.json());
 
 router.post("/", upload.single("file"), async (req, res) => {
-    const { mode, header, subject } = req.body;
+    const { mode, header, subject, type, post_num, quote_num, quote_type } = req.body;
     console.log(req.body);
     const trx = await knex.transaction();
+    
+    // mode가 "comment"인 경우 댓글 작성 처리
+    if (mode === "comment") {
+        if (!type || !post_num || !subject) {
+            return res.status(400).json({ success: false, message: "type, post_num, subject 모두 필요합니다." });
+        }
+
+        if (![0, 1].includes(parseInt(type))) {
+            return res.status(400).json({ success: false, message: "type은 0(talk), 1(think) 중 하나여야 합니다." });
+        }
+
+        try {
+            const writer_id = await convert_our_id(req.headers.authorization, res);
+            if (!writer_id) {
+                return res.status(404).json({ success: false, message: "user_id에 해당하는 profile이 없습니다." });
+            }
+
+            // 게시글 존재 여부 확인
+            const targetTable = type == 0 ? "talk" : "think";
+            const postColumn = type == 0 ? "talk_num" : "think_num";
+
+            const post = await trx(targetTable)
+                .where(postColumn, post_num)
+                .select(knex.raw("1"))
+                .first();
+
+            if (!post) {
+                await trx.rollback();
+                return res.status(404).json({
+                    success: false,
+                    message: `해당 ${type == 0 ? "talk" : "think"} 게시글(post_num=${post_num})이 존재하지 않습니다.`
+                });
+            }
+
+            // 댓글 작성자의 user_id 존재 확인
+            const user = await trx("profile")
+                .where("id", writer_id)
+                .select("user_id")
+                .first();
+
+            if (!user) {
+                await trx.rollback();
+                return res.status(404).json({
+                    success: false,
+                    message: "댓글 작성자 user_id가 존재하지 않습니다."
+                });
+            }
+
+            // 이미지 처리
+            let filename = null;
+            if (req.file) {
+                const ext = req.file.originalname.split(".").pop();
+                filename = generateFilename(ext);
+                await saveImage(req.file.buffer, filename);
+            }
+
+            // 인용 처리
+            let quote = null;
+            let quote_type_val = null;
+            if (quote_num) {
+                try {
+                    const quote_table = quote_type == "Jam-Talk" ? "talk" : (quote_type == "Jin-Talk" ? "think" : "comment");
+                    quote = quote_num;
+                    quote_type_val = quote_table == "talk" ? 0 : (quote_table == "think" ? 1 : 2);
+                    const { quote_num: existing_quote_num } = await trx(quote_table).select("quote_num").where(`${quote_table}_num`, quote_num).first();
+                    await trx(quote_table).update({ "quote_num": existing_quote_num + 1 }).where(`${quote_table}_num`, quote_num);
+                } catch (err) {
+                    await trx.rollback();
+                    console.error("인용 과정에서 문제가 발생했습니다");
+                    return res.status(500).json({ msg: "인용 과정에서 문제가 발생했습니다." });
+                }
+            }
+
+            // 댓글 삽입
+            const [comment_num] = await trx("comment").insert({
+                type: parseInt(type),
+                post_num: parseInt(post_num),
+                subject,
+                header: header || null,
+                writer_id: writer_id,
+                user_id: user.user_id,
+                reported: 0,
+                like: 0,
+                quote: 0,
+                comment: 0,
+                mylist: 0,
+                views: 0,
+                photo: filename,
+                quote_num: quote,
+                quote_type: quote_type_val
+            });
+
+            await trx.commit();
+            res.status(201).json({
+                success: true,
+                message: "댓글이 등록되었습니다.",
+                comment_num
+            });
+        } catch (err) {
+            await trx.rollback();
+            console.error(err);
+            res.status(500).json({ success: false, message: "댓글 등록 중 서버 오류가 발생했습니다." });
+        }
+        return;
+    }
+
+    // 기존 게시글 작성 로직
     if (!mode || !header || !subject) {
         return res.status(400).json({ success: false, message: "모든 필드를 입력해주세요." });
     }

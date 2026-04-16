@@ -16,13 +16,13 @@ router.use(
 
 // 댓글 작성하기
 router.post("/", async (req, res) => {
-    const { type, post_num, subject } = req.body;
+    const { type, post_num, subject, header } = req.body;
     const our_id = await define_id(req.headers.authorization, res);
 
     if (!our_id || type === undefined || post_num === undefined || !subject) {
         return res.status(400).json({
             success: false,
-            message: "user_id, type, post_num, subject 모두 필요합니다."
+            message: "type, post_num, subject 모두 필요합니다."
         });
     }
 
@@ -62,17 +62,27 @@ router.post("/", async (req, res) => {
                 message: "댓글 작성자 user_id가 존재하지 않습니다."
             });
         }
-        // 댓글 삽입
-        await knex("comment").insert({
+
+        // 댓글 삽입 ( writer_id 추가, reported 기본값 0)
+        const [comment_num] = await knex("comment").insert({
             type,
             post_num,
             subject,
-            user_id: user.user_id
+            header: header || null,
+            writer_id: our_id,
+            user_id: user.user_id,
+            reported: 0,
+            like: 0,
+            quote: 0,
+            comment: 0,
+            mylist: 0,
+            views: 0
         });
 
         res.status(201).json({
             success: true,
-            message: "댓글이 등록되었습니다."
+            message: "댓글이 등록되었습니다.",
+            comment_num
         });
     } catch (err) {
         console.error(err);
@@ -124,18 +134,27 @@ router.get("/", async (req, res) => {
 
         //  댓글 쿼리 생성(준비)
         const commentQuery = knex("comment as p")
-        .leftJoin("profile","p.user_id","profile.user_id")
+            .leftJoin("profile", "p.user_id", "profile.user_id")
             .select(
                 "comment_num AS comment_id",
                 "p.user_id as user_id",
+                "p.writer_id",
+                "header",
                 "subject",
-                "like",
+                "p.like",
+                "p.quote",
                 "quote_num AS quotes",
                 "bookmarks",
+                "comment as comment_count",
+                "mylist",
+                "views",
+                "photo",
+                "vote",
+                "reported",
                 "timestamp",
                 "profile.nickname",
                 "profile.image as profile_image",
-                knex.raw("(`like` * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity"),
+                knex.raw("(`p`.`like` * 2 + `p`.`quote` * 3.5 + `p`.`bookmarks` * 2) AS popularity"),
                 ...islikeandbookmark(id, "comment", 2) // 가상의 Column
             )
             .where({ type, post_num });
@@ -170,15 +189,17 @@ router.get("/", async (req, res) => {
 
 router.delete("/:comment_id", async (req, res) => {
     const id = await define_id(req.headers.authorization, res);
-    const comment_data = await knex("comment").select("user_id").where("comment_id", req.params.comment_id).first();
-    const comment_writer_id = await user_id_to_id(comment_data.user_id);
-    if (id != comment_writer_id) {
+    const comment_data = await knex("comment").select("writer_id").where("comment_num", req.params.comment_id).first();
+    if (!comment_data) {
+        return res.status(404).json({ "msg": "댓글이 존재하지 않습니다", "success": 0 });
+    }
+    if (id != comment_data.writer_id) {
         console.log(id);
-        console.log(comment_data.user_id);
+        console.log(comment_data.writer_id);
         return res.status(403).json({ "msg": "삭제 권한이 없습니다", "success": 0 })
     }
     try {
-        await knex("comment").where("comment_id", req.params.comment_id).delete();
+        await knex("comment").where("comment_num", req.params.comment_id).delete();
         return res.json({ "success": 1 })
     } catch {
         return res.status(500).json({ "success": 0, "msg": "삭제 과정에서 오류가 발생했습니다" });
@@ -194,7 +215,7 @@ async function updateCount(res, comment_id, field, increment) {
             return res.status(404).json({ success: false, message: "댓글을 찾을 수 없습니다." });
         }
 
-        const currentValue = comment[field];
+        const currentValue = comment[field] || 0;
         const newValue = Math.max(0, currentValue + increment); // 0 미만 방지
 
         await knex("comment")
@@ -212,28 +233,56 @@ async function updateCount(res, comment_id, field, increment) {
     }
 }
 
-// likes
-router.patch("/:comment_id/likes/increase", (req, res) => {
-    updateCount(res, req.params.comment_id, "likes", 1);
+// like (단수형으로 변경)
+router.patch("/:comment_id/like/increase", (req, res) => {
+    updateCount(res, req.params.comment_id, "like", 1);
 });
-router.patch("/:comment_id/likes/decrease", (req, res) => {
-    updateCount(res, req.params.comment_id, "likes", -1);
-});
-
-// quotes
-router.patch("/:comment_id/quotes/increase", (req, res) => {
-    updateCount(res, req.params.comment_id, "quotes", 1);
-});
-router.patch("/:comment_id/quotes/decrease", (req, res) => {
-    updateCount(res, req.params.comment_id, "quotes", -1);
+router.patch("/:comment_id/like/decrease", (req, res) => {
+    updateCount(res, req.params.comment_id, "like", -1);
 });
 
-// bookmarks
-router.patch("/:comment_id/bookmarks/increase", (req, res) => {
-    updateCount(res, req.params.comment_id, "bookmarks", 1);
+// quote (단수형, quote_num -> quote)
+router.patch("/:comment_id/quote/increase", (req, res) => {
+    updateCount(res, req.params.comment_id, "quote", 1);
 });
-router.patch("/:comment_id/bookmarks/decrease", (req, res) => {
-    updateCount(res, req.params.comment_id, "bookmarks", -1);
+router.patch("/:comment_id/quote/decrease", (req, res) => {
+    updateCount(res, req.params.comment_id, "quote", -1);
+});
+
+// mylist (bookmarks -> mylist)
+router.patch("/:comment_id/mylist/increase", (req, res) => {
+    updateCount(res, req.params.comment_id, "mylist", 1);
+});
+router.patch("/:comment_id/mylist/decrease", (req, res) => {
+    updateCount(res, req.params.comment_id, "mylist", -1);
+});
+
+// views 증가
+router.patch("/:comment_id/views/increase", async (req, res) => {
+    try {
+        const comment = await knex("comment").where("comment_num", req.params.comment_id).first();
+        if (!comment) {
+            return res.status(404).json({ success: false, message: "댓글을 찾을 수 없습니다." });
+        }
+        const newViews = (comment.views || 0) + 1;
+        await knex("comment").where("comment_num", req.params.comment_id).update({ views: newViews });
+        return res.json({
+            success: true,
+            message: "조회수 증가 완료",
+            new_views: newViews
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ success: false, message: "서버 오류" });
+    }
+});
+
+// comment (대댓글 수) 증가/감소
+router.patch("/:comment_id/comment/increase", (req, res) => {
+    updateCount(res, req.params.comment_id, "comment", 1);
+});
+router.patch("/:comment_id/comment/decrease", (req, res) => {
+    updateCount(res, req.params.comment_id, "comment", -1);
 });
 
 
