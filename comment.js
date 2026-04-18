@@ -1,8 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, user_id_to_id, islikeandbookmark } = require('./general.js');
-
+const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote } = require('./general.js');
+const multer = require("multer");
+const upload = multer();
+const { saveImage, generateFilename } = require("./utils/imageSaver");
 router.use(express.json());
 
 const { stream } = require("./log.js");
@@ -15,28 +17,31 @@ router.use(
 );
 
 // 댓글 작성하기
-router.post("/", async (req, res) => {
-    const { type, post_num, subject } = req.body;
+router.post("/", upload.single("file"), async (req, res) => {
+    const type = parseInt(req.body.type);
+    const post_num = parseInt(req.body.post_num);
+    const { subject } = req.body;
     const our_id = await define_id(req.headers.authorization, res);
 
-    if (!our_id || type === undefined || post_num === undefined || !subject) {
+    if (!our_id || isNaN(type) || isNaN(post_num) || !subject) {
         return res.status(400).json({
             success: false,
             message: "user_id, type, post_num, subject 모두 필요합니다."
         });
     }
 
-    if (![0, 1].includes(type)) {
+    if (![0, 1, 2].includes(type)) {
         return res.status(400).json({
             success: false,
-            message: "type은 0(talk), 1(think) 중 하나여야 합니다."
+            message: "type은 0(talk), 1(think), 2(comment) 중 하나여야 합니다."
         });
     }
-
+    const trx = await knex.transaction();
     try {
+
         // 게시글 존재 여부 확인
-        const targetTable = type === 0 ? "talk" : "think";
-        const postColumn = type === 0 ? "talk_num" : "think_num";
+        const targetTable = type === 0 ? "talk" : (type === 1 ? "think" : "comment");
+        const postColumn = type === 0 ? "talk_num" : (type === 1 ? "think_num" : "comment_num");
 
         const post = await knex(targetTable)
             .where(postColumn, post_num)
@@ -46,7 +51,7 @@ router.post("/", async (req, res) => {
         if (!post) {
             return res.status(404).json({
                 success: false,
-                message: `해당 ${type === 0 ? "talk" : "think"} 게시글(post_num=${post_num})이 존재하지 않습니다.`
+                message: `해당 ${type === 0 ? "talk" : (type === 1 ? "think" : "comment")} 게시글(post_num=${post_num})이 존재하지 않습니다.`
             });
         }
 
@@ -62,14 +67,46 @@ router.post("/", async (req, res) => {
                 message: "댓글 작성자 user_id가 존재하지 않습니다."
             });
         }
+        let filename = null;
+        if (req.file) {
+            filename = regist_file(req.file);
+        }
+        let quote = null;
+        let quote_type = null;
+        console.log(quote)
+        if (req.body.quote_num) {
+            try {
+                ({ quote, quote_type } = await regist_quote(trx, req));
+            } catch (err) {
+                await trx.rollback();
+                console.error("인용 과정에서 문제가 발생했습니다");
+                return res.status(500).json({ msg: "인용 과정에서 문제가 발생했습니다." })
+            }
+        }
+
         // 댓글 삽입
-        await knex("comment").insert({
+        const [comment_num] = await trx("comment").insert({
             type,
             post_num,
             subject,
-            user_id: user.user_id
+            user_id: user.user_id,
+            reported: 0, // 기본값: 신고되지 않음
+            photo: filename,
+            quote,
+            quote_type
         });
-
+        if (req.body.vote) {
+            try {
+                await regist_vote(trx, { vote: req.body.vote, post_type: 2, post_num: comment_num, table: "comment" })
+            } catch (err) {
+                await trx.rollback();
+                const status = err.httpcode || 500;
+                const message = err.message || "투표 등록 중 오류가 발생했습니다.";
+                console.error(err);
+                return res.status(status).json({ success: false, message });
+            }
+        }
+        await trx.commit();
         res.status(201).json({
             success: true,
             message: "댓글이 등록되었습니다."
@@ -98,7 +135,7 @@ router.get("/", async (req, res) => {
         const sort = req.query.sort || "latest";
 
         //  유효성 검사
-        if (![0, 1].includes(type) || isNaN(post_num)) {
+        if (![0, 1, 2].includes(type) || isNaN(post_num)) {
             return res.status(400).json({
                 success: false,
                 message: "유효하지 않은 type 또는 post_num입니다.",
@@ -124,7 +161,7 @@ router.get("/", async (req, res) => {
 
         //  댓글 쿼리 생성(준비)
         const commentQuery = knex("comment as p")
-        .leftJoin("profile","p.user_id","profile.user_id")
+            .leftJoin("profile", "p.user_id", "profile.user_id")
             .select(
                 "comment_num AS comment_id",
                 "p.user_id as user_id",
@@ -135,6 +172,8 @@ router.get("/", async (req, res) => {
                 "timestamp",
                 "profile.nickname",
                 "profile.image as profile_image",
+                "photo",
+                "vote",
                 knex.raw("(`like` * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity"),
                 ...islikeandbookmark(id, "comment", 2) // 가상의 Column
             )
@@ -170,7 +209,7 @@ router.get("/", async (req, res) => {
 
 router.delete("/:comment_id", async (req, res) => {
     const id = await define_id(req.headers.authorization, res);
-    const comment_data = await knex("comment").select("user_id").where("comment_id", req.params.comment_id).first();
+    const comment_data = await knex("comment").select("user_id").where("comment_num", req.params.comment_id).first();
     const comment_writer_id = await user_id_to_id(comment_data.user_id);
     if (id != comment_writer_id) {
         console.log(id);
@@ -178,7 +217,7 @@ router.delete("/:comment_id", async (req, res) => {
         return res.status(403).json({ "msg": "삭제 권한이 없습니다", "success": 0 })
     }
     try {
-        await knex("comment").where("comment_id", req.params.comment_id).delete();
+        await knex("comment").where("comment_num", req.params.comment_id).delete();
         return res.json({ "success": 1 })
     } catch {
         return res.status(500).json({ "success": 0, "msg": "삭제 과정에서 오류가 발생했습니다" });
@@ -214,18 +253,18 @@ async function updateCount(res, comment_id, field, increment) {
 
 // likes
 router.patch("/:comment_id/likes/increase", (req, res) => {
-    updateCount(res, req.params.comment_id, "likes", 1);
+    updateCount(res, req.params.comment_id, "like", 1);
 });
 router.patch("/:comment_id/likes/decrease", (req, res) => {
-    updateCount(res, req.params.comment_id, "likes", -1);
+    updateCount(res, req.params.comment_id, "like", -1);
 });
 
 // quotes
 router.patch("/:comment_id/quotes/increase", (req, res) => {
-    updateCount(res, req.params.comment_id, "quotes", 1);
+    updateCount(res, req.params.comment_id, "quote_num", 1);
 });
 router.patch("/:comment_id/quotes/decrease", (req, res) => {
-    updateCount(res, req.params.comment_id, "quotes", -1);
+    updateCount(res, req.params.comment_id, "quote_num", -1);
 });
 
 // bookmarks

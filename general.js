@@ -1,5 +1,6 @@
 const knex = require('./knex.js');
 const jwt = require("jsonwebtoken");
+const { saveImage, generateFilename } = require("./utils/imageSaver");
 
 const TYPE_BLOCK = 0;
 const TYPE_MUTE = 1;
@@ -151,14 +152,14 @@ function make_code(len) {
 }
 
 async function add_nickname(id) {
-    [nickname] = await knex("profile").select("nickname").where("id", id)
+    const [nickname] = await knex("profile").select("nickname").where("id", id)
     return nickname.nickname;
 }
 async function id_to_user_id(id) {
     if (id == undefined) {
         return null;
     }
-    user_id_data = await knex("profile").select("user_id").where("id", id).first();
+    const user_id_data = await knex("profile").select("user_id").where("id", id).first();
     return user_id_data.user_id
 }
 
@@ -166,7 +167,7 @@ async function user_id_to_id(user_id) {
     if (user_id == undefined) {
         return null;
     }
-    id_data = await knex("profile").select("id").where("user_id", user_id).first();
+    const id_data = await knex("profile").select("id").where("user_id", user_id).first();
     if (id_data.id == undefined) {
         return null;
     }
@@ -192,6 +193,54 @@ async function decrement_quote_num(post_info, trx) {
     return new_quote_num.quote_num;
 }
 
+async function regist_file(file) {
+    const ext = file.originalname.split(".").pop();
+    const filename = generateFilename(ext);
+
+    const savedPath = await saveImage(file.buffer, filename);
+    return filename;
+}
+
+async function regist_quote(trx, req) {
+    const quote_table = req.body.quote_type == "Jam-Talk" ? "talk" : (req.body.quote_type == "Jin-Talk" ? "think" : "comment");
+    const quote = req.body.quote_num;
+    const quote_type = quote_table == "talk" ? 0 : (quote_table == "think" ? 1 : 2);
+    const { quote_num, ...rest } = await trx(quote_table).select("quote_num").where(`${quote_table}_num`, req.body.quote_num).first();
+    await trx(quote_table).update({ "quote_num": quote_num + 1 }).where(`${quote_table}_num`, req.body.quote_num);
+    return { quote, quote_type }
+
+}
+
+async function regist_vote(trx, { vote, post_num, post_type, table }) {
+    if (vote.vote_1.length <= 0 || vote.vote_2.length <= 0) {
+        console.log(vote.vote_1.length, vote.vote_2.length);
+        await trx.rollback();
+        throw Object.assign(new Error("투표 항목은 2개 이상이어야 합니다."), { httpcode: 400 });
+    }
+    let [vote_num] = await trx("vote").insert({
+        post_type,
+        post_num,
+        vote_1: vote.vote_1,
+        vote_2: vote.vote_2,
+        vote_3: vote.vote_3 || null,
+        vote_4: vote.vote_4 || null,
+        vote_5: vote.vote_5 || null,
+        vote_6: vote.vote_6 || null,
+        end_date: toKstDatetime(vote.end_date)
+    })
+    const test = await trx(table).update({ vote: vote_num }).where(`${table}_num`, post_num);
+    console.log("vote 가 진행됬는지 확인:" + test)
+}
+
+function toKstDatetime(isoString) {
+    console.log("원본 ISO 문자열:", isoString);
+    const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+    // const KST_OFFSET_MS = 0;
+    const kstDate = new Date(new Date(isoString).getTime() - KST_OFFSET_MS);
+    console.log("KST DATETIME 문자열:", kstDate.toISOString().slice(0, 19).replace('T', ' '));
+    return kstDate.toISOString().slice(0, 19).replace('T', ' ');
+}
+
 module.exports = {
     convert_our_id,
     define_id,
@@ -203,6 +252,9 @@ module.exports = {
     user_id_to_id,
     islikeandbookmark,
     decrement_quote_num,
+    regist_file,
+    regist_quote,
+    regist_vote,
     typeMap,
     TYPE_BLOCK,
     TYPE_MUTE,
