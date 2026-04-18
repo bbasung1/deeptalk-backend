@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { convert_our_id, id_to_user_id, add_nickname, regist_file, regist_quote, regist_vote } = require('./general.js');
+const { define_id, id_to_user_id, add_nickname, regist_file, regist_quote, regist_vote } = require('./general.js');
 const { sendPostNotification } = require('./fcm.js');
 const multer = require("multer");
 const upload = multer();
@@ -22,7 +22,7 @@ router.post("/", upload.single("file"), async (req, res) => {
     const { mode, subject } = req.body;
     console.log(req.body);
     const trx = await knex.transaction();
-    if (!mode || !header || !subject) {
+    if (!mode || !subject) {
         return res.status(400).json({ success: false, message: "모든 필드를 입력해주세요." });
     }
 
@@ -31,7 +31,7 @@ router.post("/", upload.single("file"), async (req, res) => {
     }
 
     try {
-        const writer_id = await convert_our_id(req.headers.authorization, res);  // 내부 ID로 변환
+        const writer_id = await define_id(req.headers.authorization, res);  // 내부 ID로 변환
         // profile.user_id를 user.id로로
         if (!writer_id) {
             return res.status(404).json({ success: false, message: "user_id에 해당하는 profile이 없습니다." });
@@ -68,7 +68,7 @@ router.post("/", upload.single("file"), async (req, res) => {
         if (req.body.vote) {
             let post_type = (mode === "Jam-Talk") ? 0 : (mode === "Jin-Talk") ? 1 : 2;
             try {
-                await regist_file(trx, { vote: req.body.vote, post_type, post_num, table: table })
+                await regist_vote(trx, { vote: req.body.vote, post_type, post_num, table: table })
             } catch (err) {
                 await trx.rollback();
                 const status = err.httpcode || 500;

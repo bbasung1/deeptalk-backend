@@ -1,5 +1,6 @@
 const knex = require('./knex.js');
 const jwt = require("jsonwebtoken");
+const { saveImage, generateFilename } = require("./utils/imageSaver");
 
 const TYPE_BLOCK = 0;
 const TYPE_MUTE = 1;
@@ -151,14 +152,14 @@ function make_code(len) {
 }
 
 async function add_nickname(id) {
-    [nickname] = await knex("profile").select("nickname").where("id", id)
+    const [nickname] = await knex("profile").select("nickname").where("id", id)
     return nickname.nickname;
 }
 async function id_to_user_id(id) {
     if (id == undefined) {
         return null;
     }
-    user_id_data = await knex("profile").select("user_id").where("id", id).first();
+    const user_id_data = await knex("profile").select("user_id").where("id", id).first();
     return user_id_data.user_id
 }
 
@@ -166,7 +167,7 @@ async function user_id_to_id(user_id) {
     if (user_id == undefined) {
         return null;
     }
-    id_data = await knex("profile").select("id").where("user_id", user_id).first();
+    const id_data = await knex("profile").select("id").where("user_id", user_id).first();
     if (id_data.id == undefined) {
         return null;
     }
@@ -192,11 +193,11 @@ async function decrement_quote_num(post_info, trx) {
     return new_quote_num.quote_num;
 }
 
-async function regist_file(req) {
-    const ext = req.file.originalname.split(".").pop();
+async function regist_file(file) {
+    const ext = file.originalname.split(".").pop();
     const filename = generateFilename(ext);
 
-    const savedPath = await saveImage(req.file.buffer, filename);
+    const savedPath = await saveImage(file.buffer, filename);
     return filename;
 }
 

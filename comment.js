@@ -18,10 +18,12 @@ router.use(
 
 // 댓글 작성하기
 router.post("/", upload.single("file"), async (req, res) => {
-    const { type, post_num, subject } = req.body;
+    const type = parseInt(req.body.type);
+    const post_num = parseInt(req.body.post_num);
+    const { subject } = req.body;
     const our_id = await define_id(req.headers.authorization, res);
 
-    if (!our_id || type === undefined || post_num === undefined || !subject) {
+    if (!our_id || isNaN(type) || isNaN(post_num) || !subject) {
         return res.status(400).json({
             success: false,
             message: "user_id, type, post_num, subject 모두 필요합니다."
@@ -95,7 +97,7 @@ router.post("/", upload.single("file"), async (req, res) => {
         });
         if (req.body.vote) {
             try {
-                await regist_file(trx, { vote: req.body.vote, post_type: 2, post_num: comment_num, table: "comment" })
+                await regist_vote(trx, { vote: req.body.vote, post_type: 2, post_num: comment_num, table: "comment" })
             } catch (err) {
                 await trx.rollback();
                 const status = err.httpcode || 500;
@@ -104,6 +106,7 @@ router.post("/", upload.single("file"), async (req, res) => {
                 return res.status(status).json({ success: false, message });
             }
         }
+        await trx.commit();
         res.status(201).json({
             success: true,
             message: "댓글이 등록되었습니다."
@@ -206,7 +209,7 @@ router.get("/", async (req, res) => {
 
 router.delete("/:comment_id", async (req, res) => {
     const id = await define_id(req.headers.authorization, res);
-    const comment_data = await knex("comment").select("user_id").where("comment_id", req.params.comment_id).first();
+    const comment_data = await knex("comment").select("user_id").where("comment_num", req.params.comment_id).first();
     const comment_writer_id = await user_id_to_id(comment_data.user_id);
     if (id != comment_writer_id) {
         console.log(id);
@@ -214,7 +217,7 @@ router.delete("/:comment_id", async (req, res) => {
         return res.status(403).json({ "msg": "삭제 권한이 없습니다", "success": 0 })
     }
     try {
-        await knex("comment").where("comment_id", req.params.comment_id).delete();
+        await knex("comment").where("comment_num", req.params.comment_id).delete();
         return res.json({ "success": 1 })
     } catch {
         return res.status(500).json({ "success": 0, "msg": "삭제 과정에서 오류가 발생했습니다" });
@@ -250,18 +253,18 @@ async function updateCount(res, comment_id, field, increment) {
 
 // likes
 router.patch("/:comment_id/likes/increase", (req, res) => {
-    updateCount(res, req.params.comment_id, "likes", 1);
+    updateCount(res, req.params.comment_id, "like", 1);
 });
 router.patch("/:comment_id/likes/decrease", (req, res) => {
-    updateCount(res, req.params.comment_id, "likes", -1);
+    updateCount(res, req.params.comment_id, "like", -1);
 });
 
 // quotes
 router.patch("/:comment_id/quotes/increase", (req, res) => {
-    updateCount(res, req.params.comment_id, "quotes", 1);
+    updateCount(res, req.params.comment_id, "quote_num", 1);
 });
 router.patch("/:comment_id/quotes/decrease", (req, res) => {
-    updateCount(res, req.params.comment_id, "quotes", -1);
+    updateCount(res, req.params.comment_id, "quote_num", -1);
 });
 
 // bookmarks
