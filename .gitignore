@@ -130,3 +130,6 @@ dist
 .pnp.*
 
 .github/agents
+
+# Claude Code
+.claude/
