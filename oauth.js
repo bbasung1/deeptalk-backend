@@ -439,15 +439,24 @@ router.post("/login", async (req, res) => {
     }
     const token = jwt.sign({ email: decodetoken.email, sub: sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
     await knex("user").update({ our_jwt: token }).where("id", sub)
-    res.json({ id_token: token });
+    let [is_delete] = await knex("user").select("deletetime").where("id", sub).first();
+    let willdelete = 0;
+    if (is_delete.deletetime != null) {
+      willdelete = 1;
+    }
+    res.json({ id_token: token, willdelete });
   } else if (iss == "https://accounts.google.com") {
-    const [id] = await knex.select("google_access_code", "google_refresh_code", "id").from("user").where("google_id", sub);
+    const [id] = await knex.select("google_access_code", "google_refresh_code", "id", "deletetime").from("user").where("google_id", sub);
     console.log();
     if (id == undefined) {
       return res.json({ success: 0, msg: "not sign up" })
     }
+    let willdelete = 0;
+    if (id.deletetime != null) {
+      willdelete = 1;
+    }
     const token = jwt.sign({ email: decodetoken.email, sub: id.id }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
-    return res.json({ id_token: token });
+    return res.json({ id_token: token, willdelete });
   }
 });
 
