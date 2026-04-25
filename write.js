@@ -54,6 +54,7 @@ router.post("/", upload.single("file"), async (req, res) => {
             }
         }
         const user_id = await id_to_user_id(writer_id);
+        const header = req.body.header || null;
         let [post_num] = await trx(table).insert({
             writer_id: writer_id,
             user_id: user_id,
