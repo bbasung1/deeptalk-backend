@@ -22,11 +22,15 @@ router.post("/", upload.single("file"), async (req, res) => {
     const post_num = parseInt(req.body.post_num);
     const { subject } = req.body;
     const our_id = await define_id(req.headers.authorization, res);
-
+    console.log(req.body);
+    console.log(our_id);
+    console.log(type);
+    console.log(post_num);
+    console.log(subject);
     if (!our_id || isNaN(type) || isNaN(post_num) || !subject) {
         return res.status(400).json({
             success: false,
-            message: "user_id, type, post_num, subject 모두 필요합니다."
+            message: "jwt_token, type, post_num, subject 모두 필요합니다."
         });
     }
 
