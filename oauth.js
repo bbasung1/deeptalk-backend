@@ -300,10 +300,12 @@ router.put("/signup", async (req, res) => {
 
 router.delete("/account", async (req, res) => {
   ourid = await define_id(req.headers.authorization, res);
+  console.log(req.body);
+  console.log(ourid);
   const reason = req.body.reason;
   const time = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   try {
-    knex('user').where("id", ourid).update({ deletetime: time, delete_reason: reason });
+    await knex('user').where("id", ourid).update({ deletetime: time, delete_reason: reason });
     res.json({ success: 1 });
   } catch (err) {
     console.log(err);
@@ -368,6 +370,7 @@ router.post("/login", async (req, res) => {
             senddata.willdelete = false;
             if (tokendata[0].deletetime != null) {
               senddata.willdelete = true;
+              senddata.deletetime = tokendata[0].deletetime;
             }
             delete senddata.token_type;
             delete senddata.expires_in;
@@ -417,6 +420,7 @@ router.post("/login", async (req, res) => {
             senddata.willdelete = false;
             if (tokendata[0].deletetime != null) {
               senddata.willdelete = true;
+              senddata.deletetime = tokendata[0].deletetime;
             }
             knex("user")
               .where("apple_id", sub)
@@ -439,15 +443,28 @@ router.post("/login", async (req, res) => {
     }
     const token = jwt.sign({ email: decodetoken.email, sub: sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
     await knex("user").update({ our_jwt: token }).where("id", sub)
-    res.json({ id_token: token });
+    let [is_delete] = await knex("user").select("deletetime").where("id", sub).first();
+    let willdelete = 0;
+    let deletetime = null;
+    if (is_delete.deletetime != null) {
+      willdelete = 1;
+      deletetime = is_delete.deletetime;
+    }
+    res.json({ id_token: token, willdelete, deletetime });
   } else if (iss == "https://accounts.google.com") {
-    const [id] = await knex.select("google_access_code", "google_refresh_code", "id").from("user").where("google_id", sub);
+    const [id] = await knex.select("google_access_code", "google_refresh_code", "id", "deletetime").from("user").where("google_id", sub);
     console.log();
     if (id == undefined) {
       return res.json({ success: 0, msg: "not sign up" })
     }
+    let willdelete = 0;
+    let deletetime = null;
+    if (id.deletetime != null) {
+      willdelete = 1;
+      deletetime = id.deletetime;
+    }
     const token = jwt.sign({ email: decodetoken.email, sub: id.id }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
-    return res.json({ id_token: token });
+    return res.json({ id_token: token, willdelete, deletetime });
   }
 });
 
