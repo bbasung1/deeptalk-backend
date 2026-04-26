@@ -251,29 +251,5 @@ async function updateCount(res, comment_id, field, increment) {
     }
 }
 
-// likes
-router.patch("/:comment_id/likes/increase", (req, res) => {
-    updateCount(res, req.params.comment_id, "like", 1);
-});
-router.patch("/:comment_id/likes/decrease", (req, res) => {
-    updateCount(res, req.params.comment_id, "like", -1);
-});
-
-// quotes
-router.patch("/:comment_id/quotes/increase", (req, res) => {
-    updateCount(res, req.params.comment_id, "quote_num", 1);
-});
-router.patch("/:comment_id/quotes/decrease", (req, res) => {
-    updateCount(res, req.params.comment_id, "quote_num", -1);
-});
-
-// bookmarks
-router.patch("/:comment_id/bookmarks/increase", (req, res) => {
-    updateCount(res, req.params.comment_id, "bookmarks", 1);
-});
-router.patch("/:comment_id/bookmarks/decrease", (req, res) => {
-    updateCount(res, req.params.comment_id, "bookmarks", -1);
-});
-
 
 module.exports = router;

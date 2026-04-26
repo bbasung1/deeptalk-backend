@@ -48,14 +48,14 @@ router.delete("/:id", async (req, res) => {
     const id_token = req.headers.authorization;
     const id = await define_id(id_token, res);
     const trx = await knex.transaction();
-    post_info = await knex("talk").select("quote", "quote_type", "vote", "writer_id").where("talk_num", req.params.id).first();
+    post_info = await knex("talk").select("quote", "quote_type", "vote", "writer_id", "draft").where("talk_num", req.params.id).first();
     if (id != post_info.writer_id) {
         return res.status(403).json({ "msg": "삭제 권한이 없습니다", "code": "4101" })
     }
     const senddata = { success: 1 }
     try {
         await trx("talk").where("talk_num", req.params.id).delete();
-        if (post_info.quote) {
+        if (post_info.quote && post_info.draft == 0) {
             senddata.quote_num = await decrement_quote_num(post_info, trx);
         }
         if (post_info.vote) {
