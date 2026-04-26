@@ -143,6 +143,7 @@ function serializePost(post) {
         quote: post.quote ?? null,
         quote_type: post.quote_type ?? null,
         quote_num: post.quote_num ?? 0,
+        draft: post.draft ?? 0,
 
         // --- 통계 ---
         like: post.like ?? 0,

@@ -90,12 +90,12 @@ router.get("/quotes/:type/:post_id", async (req, res) => {
     const [list1, list2, list3] = await Promise.all([
         knex("talk as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
-            .where({ quote_type: type, quote: req.params.post_id })
+            .where({ quote_type: type, quote: req.params.post_id, 'p.draft': 0 })
             .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "talk", 0))
             .limit(10).offset(page * 10),
         knex("think as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
-            .where({ quote_type: type, quote: req.params.post_id })
+            .where({ quote_type: type, quote: req.params.post_id, 'p.draft': 0 })
             .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "think", 1))
             .limit(10).offset(page * 10),
         knex("comment as p")
