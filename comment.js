@@ -89,6 +89,7 @@ router.post("/", upload.single("file"), async (req, res) => {
         }
 
         // 댓글 삽입
+        await knex(targetTable).where(postColumn, post_num).increment("comment", 1);
         const [comment_num] = await trx("comment").insert({
             type,
             post_num,
@@ -162,7 +163,6 @@ router.get("/", async (req, res) => {
                 message: "해당 게시글이 존재하지 않습니다."
             });
         }
-        await knex(targetTable).where(postColumn, post_num).increment("comment", 1);
         //  댓글 쿼리 생성(준비)
         const commentQuery = knex("comment as p")
             .leftJoin("profile", "p.user_id", "profile.user_id")
