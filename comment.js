@@ -162,7 +162,7 @@ router.get("/", async (req, res) => {
                 message: "해당 게시글이 존재하지 않습니다."
             });
         }
-
+        await knex(targetTable).where(postColumn, post_num).increment("comment", 1);
         //  댓글 쿼리 생성(준비)
         const commentQuery = knex("comment as p")
             .leftJoin("profile", "p.user_id", "profile.user_id")
@@ -213,7 +213,7 @@ router.get("/", async (req, res) => {
 
 router.delete("/:comment_id", async (req, res) => {
     const id = await define_id(req.headers.authorization, res);
-    const comment_data = await knex("comment").select("user_id").where("comment_num", req.params.comment_id).first();
+    const comment_data = await knex("comment").select("user_id", "type", "post_num").where("comment_num", req.params.comment_id).first();
     const comment_writer_id = await user_id_to_id(comment_data.user_id);
     if (id != comment_writer_id) {
         console.log(id);
@@ -221,7 +221,10 @@ router.delete("/:comment_id", async (req, res) => {
         return res.status(403).json({ "msg": "삭제 권한이 없습니다", "success": 0 })
     }
     try {
+        const TargetTable = comment_data.type === 0 ? "talk" : "think";
+        const postColumn = comment_data.type === 0 ? "talk_num" : "think_num";
         await knex("comment").where("comment_num", req.params.comment_id).delete();
+        await knex(TargetTable).where(postColumn, comment_data.post_num).decrement("comment", 1);
         return res.json({ "success": 1 })
     } catch {
         return res.status(500).json({ "success": 0, "msg": "삭제 과정에서 오류가 발생했습니다" });
