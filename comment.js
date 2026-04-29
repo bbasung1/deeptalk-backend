@@ -73,7 +73,7 @@ router.post("/", upload.single("file"), async (req, res) => {
         }
         let filename = null;
         if (req.file) {
-            filename = regist_file(req.file);
+            filename = await regist_file(req.file);
         }
         let quote = null;
         let quote_type = null;
