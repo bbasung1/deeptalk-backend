@@ -190,6 +190,9 @@ async function decrement_quote_num(post_info, trx) {
     const type_num = type + "_num";
     await trx(type).where(type_num, post_info.quote).decrement("quote_num", 1);
     const [new_quote_num] = await trx(type).where(type_num, post_info.quote).select("quote_num");
+    if (new_quote_num == undefined) {
+        return null;
+    }
     return new_quote_num.quote_num;
 }
 
