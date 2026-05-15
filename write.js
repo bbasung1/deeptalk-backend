@@ -18,7 +18,7 @@ router.use(
 
 router.use(express.json());
 
-router.post("/", upload.single("file"), async (req, res) => {
+router.post("/", upload.array("files", 6), async (req, res) => {
     const { mode, subject } = req.body;
     console.log(req.body);
     const trx = await knex.transaction();
@@ -36,11 +36,17 @@ router.post("/", upload.single("file"), async (req, res) => {
         if (!writer_id) {
             return res.status(404).json({ success: false, message: "user_id에 해당하는 profile이 없습니다." });
         }
-        let filename = null;
         const table = (mode === "Jam-Talk") ? "talk" : "think";
-        if (req.file) {
-            filename = regist_file(req.file);
+
+        const photoFields = { photo: null, photo_1: null, photo_2: null, photo_3: null, photo_4: null, photo_5: null };
+        if (req.files && req.files.length > 0) {
+            const filenames = await Promise.all(req.files.map(f => regist_file(f)));
+            photoFields.photo = filenames[0] ?? null;
+            for (let i = 1; i <= 5; i++) {
+                photoFields[`photo_${i}`] = filenames[i] ?? null;
+            }
         }
+
         let quote = null;
         let quote_type = null;
         console.log(quote)
@@ -61,8 +67,8 @@ router.post("/", upload.single("file"), async (req, res) => {
             user_id: user_id,
             header: header,
             subject: subject,
-            reported: 0, // 기본값: 신고되지 않음
-            photo: filename,
+            reported: 0,
+            ...photoFields,
             quote,
             quote_type,
             draft

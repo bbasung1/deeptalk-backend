@@ -137,6 +137,11 @@ function serializePost(post) {
         header: post.header ?? null,
         subject: post.subject ?? null,
         photo: post.photo ?? null,
+        photo_1: post.photo_1 ?? null,
+        photo_2: post.photo_2 ?? null,
+        photo_3: post.photo_3 ?? null,
+        photo_4: post.photo_4 ?? null,
+        photo_5: post.photo_5 ?? null,
         timestamp: post.timestamp,
 
         // --- 인용 ---
