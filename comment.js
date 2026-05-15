@@ -17,7 +17,7 @@ router.use(
 );
 
 // 댓글 작성하기
-router.post("/", upload.single("file"), async (req, res) => {
+router.post("/", upload.array("files", 6), async (req, res) => {
     const type = parseInt(req.body.type);
     const post_num = parseInt(req.body.post_num);
     const { subject } = req.body;
@@ -71,10 +71,16 @@ router.post("/", upload.single("file"), async (req, res) => {
                 message: "댓글 작성자 user_id가 존재하지 않습니다."
             });
         }
-        let filename = null;
-        if (req.file) {
-            filename = await regist_file(req.file);
+
+        const photoFields = { photo: null, photo_1: null, photo_2: null, photo_3: null, photo_4: null, photo_5: null };
+        if (req.files && req.files.length > 0) {
+            const filenames = await Promise.all(req.files.map(f => regist_file(f)));
+            photoFields.photo = filenames[0] ?? null;
+            for (let i = 1; i <= 5; i++) {
+                photoFields[`photo_${i}`] = filenames[i] ?? null;
+            }
         }
+
         let quote = null;
         let quote_type = null;
         console.log(quote)
@@ -95,8 +101,8 @@ router.post("/", upload.single("file"), async (req, res) => {
             post_num,
             subject,
             user_id: user.user_id,
-            reported: 0, // 기본값: 신고되지 않음
-            photo: filename,
+            reported: 0,
+            ...photoFields,
             quote,
             quote_type
         });
@@ -177,6 +183,11 @@ router.get("/", async (req, res) => {
                 "profile.nickname",
                 "profile.image as profile_image",
                 "photo",
+                "photo_1",
+                "photo_2",
+                "photo_3",
+                "photo_4",
+                "photo_5",
                 "vote",
                 knex.raw("(`like` * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity"),
                 ...islikeandbookmark(id, "comment", 2) // 가상의 Column
