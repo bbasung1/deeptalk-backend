@@ -190,6 +190,9 @@ async function decrement_quote_num(post_info, trx) {
     const type_num = type + "_num";
     await trx(type).where(type_num, post_info.quote).decrement("quote_num", 1);
     const [new_quote_num] = await trx(type).where(type_num, post_info.quote).select("quote_num");
+    if (new_quote_num == undefined) {
+        return null;
+    }
     return new_quote_num.quote_num;
 }
 
@@ -203,10 +206,13 @@ async function regist_file(file) {
 
 async function regist_quote(trx, req) {
     const quote_table = req.body.quote_type == "Jam-Talk" ? "talk" : (req.body.quote_type == "Jin-Talk" ? "think" : "comment");
-    const quote = req.body.quote_num;
+    const quote = req.body.quote;
     const quote_type = quote_table == "talk" ? 0 : (quote_table == "think" ? 1 : 2);
-    const { quote_num, ...rest } = await trx(quote_table).select("quote_num").where(`${quote_table}_num`, req.body.quote_num).first();
-    await trx(quote_table).update({ "quote_num": quote_num + 1 }).where(`${quote_table}_num`, req.body.quote_num);
+    const { quote_num, ...rest } = await trx(quote_table).select("quote_num").where(`${quote_table}_num`, req.body.quote).first();
+    console.log("Quote Num: " + quote_num);
+    console.log("Quote Type: " + quote_type);
+    console.log("Quote Table: " + quote_table);
+    await trx(quote_table).update({ "quote_num": quote_num + 1 }).where(`${quote_table}_num`, req.body.quote);
     return { quote, quote_type }
 
 }

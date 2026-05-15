@@ -51,7 +51,7 @@ router.post("/", upload.array("files", 6), async (req, res) => {
         let quote_type = null;
         console.log(quote)
         let draft = req.body.draft ?? 0;
-        if (req.body.quote_num && draft == 0) {
+        if (req.body.quote && draft == 0) {
             try {
                 ({ quote, quote_type } = await regist_quote(trx, req));
             } catch (err) {
