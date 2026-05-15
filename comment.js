@@ -94,8 +94,7 @@ router.post("/", upload.array("files", 6), async (req, res) => {
             }
         }
 
-        // 댓글 삽입
-        await knex(targetTable).where(postColumn, post_num).increment("comment", 1);
+        await trx(targetTable).where(postColumn, post_num).increment("comment", 1);
         const [comment_num] = await trx("comment").insert({
             type,
             post_num,
