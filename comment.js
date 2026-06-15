@@ -221,6 +221,66 @@ router.get("/", async (req, res) => {
     }
 });
 
+// 댓글 단건 조회
+router.get("/:comment_id", async (req, res) => {
+    try {
+        let id = null;
+        if (req.headers.authorization) {
+            id = await define_id(req.headers.authorization, res);
+        }
+        const comment_id = parseInt(req.params.comment_id);
+
+        if (isNaN(comment_id)) {
+            return res.status(400).json({
+                success: false,
+                message: "유효하지 않은 comment_id입니다."
+            });
+        }
+
+        const comment = await knex("comment as p")
+            .leftJoin("profile", "p.user_id", "profile.user_id")
+            .select(
+                "comment_num AS comment_id",
+                "p.user_id as user_id",
+                "subject",
+                "like",
+                "quote_num AS quotes",
+                "bookmarks",
+                "timestamp",
+                "profile.nickname",
+                "profile.image as profile_image",
+                "photo",
+                "photo_1",
+                "photo_2",
+                "photo_3",
+                "photo_4",
+                "photo_5",
+                "vote",
+                ...islikeandbookmark(id, "comment", 2)
+            )
+            .where("comment_num", comment_id)
+            .first();
+
+        if (!comment) {
+            return res.status(404).json({
+                success: false,
+                message: "해당 댓글이 존재하지 않습니다."
+            });
+        }
+
+        return res.json({
+            success: true,
+            comment
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({
+            success: false,
+            message: "댓글 조회 중 서버 오류가 발생했습니다."
+        });
+    }
+});
+
 router.delete("/:comment_id", async (req, res) => {
     const id = await define_id(req.headers.authorization, res);
     const comment_data = await knex("comment").select("user_id", "type", "post_num").where("comment_num", req.params.comment_id).first();
