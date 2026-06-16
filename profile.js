@@ -23,10 +23,27 @@ router.use("/status_msg", require("./profile/status_msg.js"));
 
 router.post("/info", async (req, res) => {
   const user_id = req.body.user_id;
+
+  let requester_id = null;
+  if (req.headers.authorization) {
+    requester_id = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return;
+  }
+
   const data = await knex("profile").select("*").where("user_id", user_id).first();
   if (data.length == 0) {
     return res.status(500).json({ msg: "user_id를 찾을수 없습니다." })
   }
+
+  if (requester_id) {
+    const blocked = await knex("block_list")
+      .where({ user_id: data.id, blocked_user_id: requester_id, type: 0 })
+      .first();
+    if (blocked) {
+      return res.status(403).json({ msg: "프로필을 조회할 수 없습니다.", code: "4031" });
+    }
+  }
+
   delete data["servicealram"];
   delete data["useralram"];
   delete data["marketalram"];
