@@ -557,10 +557,11 @@ router.post("/mail_check", async (req, res) => {
     secure: false,
     auth: {
       user: "cozyhumansclub@gmail.com",
+      // user: "wbba1650@gmail.com",
       pass: process.env.GOOGLE_MAIL_PASSWORD,
     },
   });
-  let mailOptions = transporter.sendMail({
+  let mailOptions = {
     from: "test",
     to: mail_addr,
     subject: '[COZY HUMANS’ CLUB] 인증번호가 도착했습니다!',
@@ -570,7 +571,7 @@ router.post("/mail_check", async (req, res) => {
 해당 인증번호의 효력은 10분 동안만  유지됩니다.\n\n
 도움이 필요할 경우 아래 고객센터로 문의해 주세요.\n
 cozyhumansclub@gmail.com`,
-  });
+  };
   transporter.sendMail(mailOptions, function (error) {
     if (error) {
       console.log(error);
