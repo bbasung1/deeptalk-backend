@@ -24,8 +24,27 @@ async function convert_our_id(user_id) {
 async function tmp_convert_our_id(token) {
     // console.log(token);
     let tkn = token.split("Bearer ")[1];
-    let decodetoken = jwt.decode(tkn);
-    // console.log(decodetoken);
+    let decodetoken;
+    try {
+        // jwt.decode()는 서명 검증을 안 해서 누구나 토큰을 위조할 수 있었음.
+        // jwt.verify()로 바꿔서 우리 서버가 발급한(JWT_SECRET으로 서명한) 토큰인지 확인.
+        decodetoken = jwt.verify(tkn, process.env.JWT_SECRET, { issuer: 'jamdeeptalk.com' });
+    } catch (err) {
+        if (err.name === "TokenExpiredError") {
+            console.error("token is too old");
+            return {
+                code: 4003,
+                msg: "token is too old",
+                httpcode: 400
+            }
+        }
+        console.error("invalid token:", err.message);
+        return {
+            code: 4001,
+            msg: "no data. check your data",
+            httpcode: 400
+        }
+    }
     if (decodetoken == null) {
         console.error("nodata");
         return {
@@ -40,16 +59,6 @@ async function tmp_convert_our_id(token) {
             code: 4002,
             msg: "exp isn't exsisted. check the idtoken",
             httpcode: 401
-        }
-    }
-    if (decodetoken.exp * 1000 < Date.now()) {
-        console.error("token is too old");
-        return {
-            code: 4003,
-            msg: "token is too old",
-            exp: decodetoken.exp,
-            curr_time: Date.now(),
-            httpcode: 400
         }
     }
     return decodetoken.sub;
