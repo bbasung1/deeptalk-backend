@@ -70,9 +70,24 @@ router.get("/like/:type/:post_id", async (req, res) => {
 });
 
 router.get("/comment/:comment_id", async (req, res) => {
-    const content = await knex("comment as p").leftJoin("profile", "p.user_id", "profile.user_id").select("p.*", "p.comment_num AS comment_id", "profile.nickname", "profile.image").where("p.comment_num", req.params.comment_id).first();
+    let requester_id = null;
+    if (req.headers.authorization) {
+        requester_id = await define_id(req.headers.authorization, res);
+        if (res.headersSent) return;
+    }
+
+    const content = await knex("comment as p").leftJoin("profile", "p.user_id", "profile.user_id").select("p.*", "p.comment_num AS comment_id", "profile.nickname", "profile.image", "profile.id as writer_profile_id").where("p.comment_num", req.params.comment_id).first();
     if (content) {
+        if (requester_id) {
+            const blocked = await knex("block_list")
+                .where({ user_id: content.writer_profile_id, blocked_user_id: requester_id, type: 0 })
+                .first();
+            if (blocked) {
+                return res.status(403).json({ msg: "댓글을 조회할 수 없습니다.", code: "4031" });
+            }
+        }
         delete content.comment_num;
+        delete content.writer_profile_id;
     }
     res.json(content);
 });
