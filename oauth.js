@@ -225,6 +225,14 @@ router.put("/signup", async (req, res) => {
   let decodetoken = jwt.decode(tkn);
   console.log(decodetoken);
   let iss = decodetoken.iss;
+  // jamdeeptalk.com이 발급자라고 주장하는 토큰은 서명 검증해서 위조 여부 확인
+  if (iss == "jamdeeptalk.com") {
+    try {
+      decodetoken = jwt.verify(tkn, process.env.JWT_SECRET, { issuer: 'jamdeeptalk.com' });
+    } catch (err) {
+      return res.status(401).json({ success: 0, msg: "유효하지 않은 토큰입니다." });
+    }
+  }
   const trx = await knex.transaction();
   // const member = await knex("user").whereNull("deletetime").count({ "member": "*" });
   // if (MEMBER_COUNT < member[0].member) {
@@ -335,6 +343,14 @@ router.post("/login", async (req, res) => {
   let decodetoken = jwt.decode(tkn);
   console.log(decodetoken);
   let iss = decodetoken.iss;
+  // jamdeeptalk.com이 발급자라고 주장하는 토큰은 서명 검증해서 위조 여부 확인
+  if (iss == "jamdeeptalk.com") {
+    try {
+      decodetoken = jwt.verify(tkn, process.env.JWT_SECRET, { issuer: 'jamdeeptalk.com' });
+    } catch (err) {
+      return res.status(401).json({ success: 0, msg: "유효하지 않은 토큰입니다." });
+    }
+  }
   let sub = decodetoken.sub;
   if (iss == "https://kauth.kakao.com") {
     knex
@@ -443,10 +459,10 @@ router.post("/login", async (req, res) => {
     }
     const token = jwt.sign({ email: decodetoken.email, sub: sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
     await knex("user").update({ our_jwt: token }).where("id", sub)
-    let [is_delete] = await knex("user").select("deletetime").where("id", sub).first();
+    let is_delete = await knex("user").select("deletetime").where("id", sub).first();
     let willdelete = 0;
     let deletetime = null;
-    if (is_delete.deletetime != null) {
+    if (is_delete && is_delete.deletetime != null) {
       willdelete = 1;
       deletetime = is_delete.deletetime;
     }
@@ -484,11 +500,20 @@ router.get("/member_check", async (req, res) => {
   const token = req.headers.authorization.split("Bearer ")[1]
   console.log("token")
   console.log(token);
-  const tokendata = jwt.decode(token);
+  let tokendata = jwt.decode(token);
   console.log(tokendata)
   const iss = tokendata.iss;
-  const sub = tokendata.sub;
+  let sub = tokendata.sub;
   let type = "";
+  // jamdeeptalk.com이 발급자라고 주장하는 토큰은 서명 검증해서 위조 여부 확인
+  if (iss == "jamdeeptalk.com") {
+    try {
+      tokendata = jwt.verify(token, process.env.JWT_SECRET, { issuer: 'jamdeeptalk.com' });
+    } catch (err) {
+      return res.status(401).json({ is_member: 0 });
+    }
+    sub = tokendata.sub;
+  }
   if (iss == "https://kauth.kakao.com") {
     type = "kakao"
   } else if (iss == "https://appleid.apple.com") {
