@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
-const define_id = require("./general.js").define_id;
+const { define_id, user_id_to_id } = require("./general.js");
 
 const knex = require("./knex.js");
 router.use(express.json());
@@ -53,6 +53,7 @@ router.post("/info", async (req, res) => {
 })
 
 router.post("/alram", (req, res) => {
+  let useer_id = await user_id_to_id(req.body.id);
   let updatedata = {}
   if (req.body.service != null) {
     updatedata.servicealram = req.body.service;
@@ -66,6 +67,7 @@ router.post("/alram", (req, res) => {
   if (Object.keys(updatedata).length > 0) {
     knex("profile")
       .update(updatedata)
+      .where("user_id", req.body.id)
       .then(() => {
         res.status(200).json({
           success: 1
