@@ -171,6 +171,14 @@ router.get("/", async (req, res) => {
         //  댓글 쿼리 생성(준비)
         const commentQuery = knex("comment as p")
             .leftJoin("profile", "p.user_id", "profile.user_id")
+            // 내가 차단한 사람이 쓴 댓글은 제외
+            .whereNotIn("profile.id", function () {
+                this.select("blocked_user_id").from("block_list").where({ user_id: id, type: 0 });
+            })
+            // 나를 차단한 사람이 쓴 댓글도 제외
+            .whereNotIn("profile.id", function () {
+                this.select("user_id").from("block_list").where({ blocked_user_id: id, type: 0 });
+            })
             .select(
                 "comment_num AS comment_id",
                 "p.user_id as user_id",
