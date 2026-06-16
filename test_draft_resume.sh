@@ -5,8 +5,10 @@
 # - 실행 전에 sql/add_comment_draft_column.sql 을 DB에 먼저 적용해야 함.
 
 set -e
-BASE_URL="http://localhost:3000"      # 실제 서버 주소로 변경
-TOKEN="Bearer PUT_YOUR_JWT_HERE"       # 로그인해서 받은 실제 토큰으로 변경
+BASE_URL="http://localhost:9300"      # deeptalk.js가 9300 포트로 listen함
+
+# 테스트 실행 시에 토큰을 입력할 것!
+TOKEN="Bearer " # 로그인 후 발급받은 토큰을 여기에 입력 (예: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
 
 pass() { echo "[PASS] $1"; }
 fail() { echo "[FAIL] $1"; exit 1; }
