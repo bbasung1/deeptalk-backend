@@ -307,7 +307,7 @@ router.put("/signup", async (req, res) => {
 });
 
 router.delete("/account", async (req, res) => {
-  ourid = await define_id(req.headers.authorization, res);
+  let ourid = await define_id(req.headers.authorization, res);
   console.log(req.body);
   console.log(ourid);
   const reason = req.body.reason;
