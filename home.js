@@ -90,6 +90,8 @@ async function resort_post(type, ourid, page) {
         .where("blocked_user_id", ourid)
         .andWhere("type", 0);
     })
+    // 임시저장(draft) 글은 피드에 노출하지 않는다.
+    .andWhere("p.draft", 0)
     // select 내에서 knex.raw()를 사용하여 계산된 컬럼에 별칭(Alias)을 지정합니다.
     .select(
       'p.*',

@@ -23,7 +23,7 @@ router.post("/", async (req, res) => {
     let id = await user_id_to_id(user_id);
     if (req.body.type == "talk") {
         const talk = await knex('talk')
-            .where('writer_id', id)
+            .where({ 'writer_id': id, 'draft': 0 }) // 임시저장 글은 활동내역에 노출하지 않음
             .leftJoin("profile", "talk.writer_id", "profile.id")
             .select('talk.*', ...islikeandbookmark(id, "talk", 0), "profile.nickname", "profile.image as profile_image").limit(10)
             .offset(page * 10);
@@ -31,7 +31,7 @@ router.post("/", async (req, res) => {
     }
     if (req.body.type == "think") {
         const think = await knex('think')
-            .where('writer_id', id)
+            .where({ 'writer_id': id, 'draft': 0 }) // 임시저장 글은 활동내역에 노출하지 않음
             .leftJoin("profile", "think.writer_id", "profile.id")
             .select('think.*', ...islikeandbookmark(id, "think", 1), "profile.nickname", "profile.image as profile_image").limit(10)
             .offset(page * 10);
@@ -39,7 +39,7 @@ router.post("/", async (req, res) => {
     }
     if (req.body.type == "comment") {
         const user = await knex('comment')
-            .where('comment.user_id', user_id)
+            .where({ 'comment.user_id': user_id, 'comment.draft': 0 }) // 임시저장 댓글은 활동내역에 노출하지 않음
             .leftJoin("profile", "comment.user_id", "profile.user_id")
             .select("comment.*", ...islikeandbookmark(id, "comment", 2), "profile.nickname", "profile.image as profile_image").limit(10)
             .offset(page * 10);

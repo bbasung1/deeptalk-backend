@@ -32,7 +32,8 @@ router.get("/:id", async (req, res) => {
             })
             .where("p.talk_num", req.params.id)
             .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(id, "talk", 0));
-        if (talk == undefined) {
+        // 임시저장(draft) 글은 작성자 본인에게만 노출한다.
+        if (talk == undefined || (talk.draft == 1 && talk.writer_id !== id)) {
             return res.json({ msg: "없거나 비공개인 포스트 입니다" })
         }
         talk.views = talk.views + 1;

@@ -76,7 +76,8 @@ router.get("/comment/:comment_id", async (req, res) => {
         if (res.headersSent) return;
     }
 
-    const content = await knex("comment as p").leftJoin("profile", "p.user_id", "profile.user_id").select("p.*", "p.comment_num AS comment_id", "profile.nickname", "profile.image", "profile.id as writer_profile_id").where("p.comment_num", req.params.comment_id).first();
+    // 임시저장(draft) 댓글은 노출하지 않는다.
+    const content = await knex("comment as p").leftJoin("profile", "p.user_id", "profile.user_id").select("p.*", "p.comment_num AS comment_id", "profile.nickname", "profile.image", "profile.id as writer_profile_id").where({ "p.comment_num": req.params.comment_id, "p.draft": 0 }).first();
     if (content) {
         if (requester_id) {
             const blocked = await knex("block_list")
@@ -115,7 +116,7 @@ router.get("/quotes/:type/:post_id", async (req, res) => {
             .limit(10).offset(page * 10),
         knex("comment as p")
             .leftJoin("profile", "p.user_id", "profile.user_id")
-            .where({ quote_type: type, quote: req.params.post_id })
+            .where({ quote_type: type, quote: req.params.post_id, 'p.draft': 0 })
             .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "comment", 2))
             .limit(10).offset(page * 10),
     ]);
