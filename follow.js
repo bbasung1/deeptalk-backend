@@ -31,6 +31,7 @@ router.post("/:user_id", async (req, res) => {
             await trx.commit();
             return res.json({ success: 1, msg: "팔로우 해제 완료" });
         } catch (err) {
+            await trx.rollback();
             console.error(err);
             return res.json({ success: 0 });
         }
@@ -40,6 +41,7 @@ router.post("/:user_id", async (req, res) => {
         await trx.commit();
         return res.json({ success: 1, msg: "팔로우 완료" });
     } catch (err) {
+        await trx.rollback();
         console.error(err);
         return res.json({ success: 0 });
     }

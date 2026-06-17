@@ -27,7 +27,11 @@ router.post("/", upload.single("file"), async (req, res) => {
                 return res.status(500).json({ success: false, message: "이전 이미지 삭제 실패" });
             }
         }
-        const ext = req.file.originalname.split(".").pop();
+        const ALLOWED_EXTS = ["jpg", "jpeg", "png", "gif", "webp"];
+        const ext = req.file.originalname.split(".").pop().toLowerCase();
+        if (!ALLOWED_EXTS.includes(ext)) {
+            return res.status(400).json({ success: false, message: "허용되지 않는 파일 형식입니다." });
+        }
         const filename = `img_${ourid}.${ext}`;
 
         const savedPath = await saveImage(req.file.buffer, filename, FILE_DIR);

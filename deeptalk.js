@@ -45,7 +45,6 @@ app.use("/mylist", require("./bookmark.js"));
 app.use("/follow", require("./follow.js"));
 app.use("/report", require("./report.js"));
 // app.use("/test", require("./test.js"));
-app.use("/test", require("./test.js"));
 app.use("/show", require("./show.js"));
 app.use("/files", express.static(process.env.FILE_DIR));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerFile));

@@ -36,7 +36,7 @@ router.post("/:id", async (req, res) => {
             console.log("삭제output:", output)
             return res.json({ success: 1, msg: "좋아요 해제 완료", like: output.like });
         } catch (err) {
-            trx.rollback();
+            await trx.rollback();
             console.error(err);
             console.log("삭제 에러")
             return res.json({ success: 0 });
@@ -51,7 +51,7 @@ router.post("/:id", async (req, res) => {
         console.log("추가output:", output)
         return res.json({ success: 1, msg: "좋아요 완료", like: output.like });
     } catch (err) {
-        trx.rollback();
+        await trx.rollback();
         console.log("추가 에러");
         console.error(err);
         return res.json({ success: 0 });

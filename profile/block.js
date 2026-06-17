@@ -24,6 +24,7 @@ router.delete("/", async (req, res) => {
     }
 
     try {
+        let notFound = false;
         await knex.transaction(async (trx) => {
             // 1. block_list 삭제
             const deleted = await trx("block_list")
@@ -35,7 +36,8 @@ router.delete("/", async (req, res) => {
                 .del();
 
             if (deleted === 0) {
-                return res.status(404).json({ success: false, message: "차단 기록이 없습니다." });
+                notFound = true;
+                return;
             }
 
             // 2. follow_backup 확인
@@ -59,6 +61,9 @@ router.delete("/", async (req, res) => {
             }
         });
 
+        if (notFound) {
+            return res.status(404).json({ success: false, message: "차단 기록이 없습니다." });
+        }
         return res.json({ success: true, message: "block 해제 및 follow 복원 완료" });
     } catch (err) {
         console.error(err);

@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
-const define_id = require("./general.js").define_id;
+const { define_id, user_id_to_id } = require("./general.js");
 
 const knex = require("./knex.js");
 router.use(express.json());
@@ -23,7 +23,7 @@ router.use("/status_msg", require("./profile/status_msg.js"));
 
 router.post("/info", async (req, res) => {
   const user_id = req.body.user_id;
-
+  const our_id=await user_id_to_id(user_id);
   let requester_id = null;
   if (req.headers.authorization) {
     requester_id = await define_id(req.headers.authorization, res);
@@ -34,10 +34,11 @@ router.post("/info", async (req, res) => {
   if (data.length == 0) {
     return res.status(500).json({ msg: "user_id를 찾을수 없습니다." })
   }
-
+  console.log(requester_id);
+  console.log(req.body.user_id);
   if (requester_id) {
     const blocked = await knex("block_list")
-      .where({ user_id: data.id, blocked_user_id: requester_id, type: 0 })
+      .where({ user_id: requester_id, blocked_user_id: our_id, type: 0 })
       .first();
     if (blocked) {
       return res.status(403).json({ msg: "프로필을 조회할 수 없습니다.", code: "4031" });
@@ -52,7 +53,8 @@ router.post("/info", async (req, res) => {
   return res.json(data);
 })
 
-router.post("/alram", (req, res) => {
+router.post("/alram", async(req, res) => {
+  let user_id = await user_id_to_id(req.body.id);
   let updatedata = {}
   if (req.body.service != null) {
     updatedata.servicealram = req.body.service;
@@ -66,6 +68,7 @@ router.post("/alram", (req, res) => {
   if (Object.keys(updatedata).length > 0) {
     knex("profile")
       .update(updatedata)
+      .where("user_id", req.body.id)
       .then(() => {
         res.status(200).json({
           success: 1
@@ -78,9 +81,13 @@ router.post("/alram", (req, res) => {
   }
 })
 
-router.put("/id", (req, res) => {
+router.put("/id", async (req, res) => {
+  const id = await define_id(req.headers.authorization, res);
+  if (res.headersSent) return;
+  if (!id) return res.status(401).json({ success: 0, errmsg: "인증이 필요합니다." });
+
   knex("profile")
-    .where("user_id", req.body.original_id)
+    .where("id", id)
     .update({ user_id: req.body.change_id })
     .then(() => {
       res.status(200).json({ success: 1 })
@@ -136,15 +143,19 @@ router.post("/id_check", async (req, res) => {
 
 
 router.post("/nickname/register", async (req, res) => {
-  const { user_id, nickname } = req.body;
+  const id = await define_id(req.headers.authorization, res);
+  if (res.headersSent) return;
+  if (!id) return res.status(401).json({ message: "인증이 필요합니다." });
 
-  if (!user_id || !nickname) {
-    return res.status(400).json({ message: "user_id와 nickname을 입력하시오" });
+  const { nickname } = req.body;
+
+  if (!nickname) {
+    return res.status(400).json({ message: "nickname을 입력하시오" });
   }
 
   try {
     const updated = await knex("profile")
-      .where("user_id", user_id)
+      .where("id", id)
       .update({ nickname });
 
     if (updated === 0) {
@@ -202,19 +213,22 @@ router.post("/nickname", async (req, res) => {
 
 // 테마 설정
 router.post("/theme", async (req, res) => {
-  const { user_id, theme } = req.body;
+  const id = await define_id(req.headers.authorization, res);
+  if (res.headersSent) return;
+  if (!id) return res.status(401).json({ success: false, message: "인증이 필요합니다." });
 
-  // 입력값 유효성 검사
-  if (!user_id || theme === undefined) {
+  const { theme } = req.body;
+
+  if (theme === undefined) {
     return res.status(400).json({
       success: false,
-      message: "user_id와 theme 값이 필요합니다."
+      message: "theme 값이 필요합니다."
     });
   }
 
   try {
     const updated = await knex("profile")
-      .where({ user_id })
+      .where({ id })
       .update({ theme });
 
     if (updated === 0) {
