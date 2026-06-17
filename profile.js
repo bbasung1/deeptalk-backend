@@ -252,6 +252,46 @@ router.post("/theme", async (req, res) => {
   }
 });
 
+// 팔로우/팔로잉 목록(개수) 비공개 설정
+router.post("/hide_follow_list", async (req, res) => {
+  const id = await define_id(req.headers.authorization, res);
+  if (res.headersSent) return;
+  if (!id) return res.status(401).json({ success: false, message: "인증이 필요합니다." });
+
+  if (typeof req.body.hide === "undefined") {
+    return res.status(400).json({
+      success: false,
+      message: "hide 값이 필요합니다."
+    });
+  }
+  const hide = (req.body.hide === true || req.body.hide === 1 || req.body.hide === "1") ? 1 : 0;
+
+  try {
+    const updated = await knex("profile")
+      .where({ id })
+      .update({ hide_follow_list: hide });
+
+    if (updated === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "해당 user_id에 대한 profile이 존재하지 않습니다."
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: hide ? "팔로우/팔로워 목록을 비공개로 설정했습니다." : "팔로우/팔로워 목록 비공개를 해제했습니다.",
+      hide_follow_list: Boolean(hide)
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "서버 오류"
+    });
+  }
+});
+
 router.put("/mail", async (req, res) => {
   const id = await define_id(req.headers.authorization, res);
   console.log(id);
