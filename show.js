@@ -15,10 +15,30 @@ router.use(
     )
 );
 
+// 대상 유저가 팔로우/팔로워 목록을 비공개로 설정했는지 확인합니다.
+// 본인이 본인 목록을 조회하는 경우에는 비공개 설정과 무관하게 항상 조회를 허용합니다.
+async function isFollowListHidden(targetId, req, res) {
+    let requester_id = null;
+    if (req.headers.authorization) {
+        requester_id = await define_id(req.headers.authorization, res);
+        if (res.headersSent) return true; // define_id가 이미 에러 응답을 보냄
+    }
+    if (requester_id != null && Number(requester_id) === Number(targetId)) {
+        return false;
+    }
+    const profile = await knex("profile").where("id", targetId).select("hide_follow_list").first();
+    return Boolean(profile && profile.hide_follow_list);
+}
+
 router.get("/follow/:user_id", async (req, res) => {
     const ourid = await user_id_to_id(req.params.user_id)
     if (ourid == undefined) {
         return res.status(404).json({ msg: "존재하지 않는 유저입니다" });
+    }
+    const hidden = await isFollowListHidden(ourid, req, res);
+    if (res.headersSent) return;
+    if (hidden) {
+        return res.json([]);
     }
     const list = await knex("follow").leftJoin("profile", "follow.friend_id", "profile.id").where("follow.user_id", ourid).select("profile.nickname", "profile.user_id", "profile.image");
     res.json(list);
@@ -30,6 +50,12 @@ router.get("/follower/:user_id", async (req, res) => {
 
         if (!ourid) {
             return res.status(404).json({ msg: "존재하지 않는 유저입니다" });
+        }
+
+        const hidden = await isFollowListHidden(ourid, req, res);
+        if (res.headersSent) return;
+        if (hidden) {
+            return res.json([]);
         }
 
         // 단 한 번의 쿼리로 프로필 정보와 맞팔로우 상태를 가져옵니다.
