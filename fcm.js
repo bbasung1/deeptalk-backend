@@ -56,6 +56,42 @@ async function sendPostNotification(writer_id, nickname, mode) {
     }
 }
 
+async function sendReactionNotification({ table, postNum, actorId, actorNickname, reactionType }) {
+    try {
+        const numColumn = table === "talk" ? "talk_num" : "think_num";
+        const post = await knex(table)
+            .where(numColumn, postNum)
+            .select("writer_id", "notify_mute")
+            .first();
+
+        if (!post) return;
+        if (post.notify_mute) return; // 작성자가 반응 알림을 뮤트한 게시물
+        if (post.writer_id === actorId) return; // 자기 글에 자기가 반응한 경우는 알림 발송 안함
+
+        const tokenRows = await knex("fcm_token")
+            .where("our_id", post.writer_id)
+            .select("fcm_token");
+
+        if (tokenRows.length === 0) return;
+        const tokens = tokenRows.map(row => row.fcm_token);
+
+        const actionText = reactionType === "comment" ? "댓글을 남겼습니다" : "좋아요를 눌렀습니다";
+
+        const message = {
+            notification: {
+                title: `${actorNickname}님이 회원님의 글에 ${actionText}.`,
+                body: "지금 확인해보세요!",
+            },
+            tokens,
+        };
+
+        const response = await admin.messaging().sendEachForMulticast(message);
+        console.log(`반응 알림 발송 완료 - 성공: ${response.successCount}, 실패: ${response.failureCount}`);
+    } catch (err) {
+        console.error("반응 알림 발송 실패:", err);
+    }
+}
+
 router.post("/token", async (req, res) => {
     const our_id = await define_id(req.headers.authorization, res);
     if (!our_id) {
@@ -81,3 +117,4 @@ router.get("/test", async (req, res) => {
 
 module.exports = router;
 module.exports.sendPostNotification = sendPostNotification;
+module.exports.sendReactionNotification = sendReactionNotification;

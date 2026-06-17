@@ -1,8 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, islikeandbookmark } = require('./general.js');
+const { define_id, islikeandbookmark, add_nickname } = require('./general.js');
 const { buildPostResponse } = require("./postSerializer.js");
+const { sendReactionNotification } = require('./fcm.js');
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 const { stream } = require("./log.js");
@@ -49,7 +50,20 @@ router.post("/:id", async (req, res) => {
         await trx.commit();
         const output = await knex(type).select("like").where(num_name, req.params.id).first();
         console.log("추가output:", output)
-        return res.json({ success: 1, msg: "좋아요 완료", like: output.like });
+        res.json({ success: 1, msg: "좋아요 완료", like: output.like });
+
+        // 게시물 작성자에게 반응 알림 발송 (응답 블로킹 방지를 위해 await 생략, talk/think에만 해당)
+        if (type === "talk" || type === "think") {
+            const nickname = await add_nickname(ourid);
+            sendReactionNotification({
+                table: type,
+                postNum: req.params.id,
+                actorId: ourid,
+                actorNickname: nickname,
+                reactionType: "like"
+            });
+        }
+        return;
     } catch (err) {
         trx.rollback();
         console.log("추가 에러");

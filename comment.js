@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote } = require('./general.js');
+const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote, add_nickname } = require('./general.js');
+const { sendReactionNotification } = require('./fcm.js');
 const multer = require("multer");
 const upload = multer();
 const { saveImage, generateFilename } = require("./utils/imageSaver");
@@ -121,6 +122,18 @@ router.post("/", upload.array("files", 6), async (req, res) => {
             success: true,
             message: "댓글이 등록되었습니다."
         });
+
+        // 게시물 작성자에게 반응 알림 발송 (응답 블로킹 방지를 위해 await 생략, talk/think에만 해당)
+        if (targetTable === "talk" || targetTable === "think") {
+            const nickname = await add_nickname(our_id);
+            sendReactionNotification({
+                table: targetTable,
+                postNum: post_num,
+                actorId: our_id,
+                actorNickname: nickname,
+                reactionType: "comment"
+            });
+        }
     } catch (err) {
         console.error(err);
         res.status(500).json({

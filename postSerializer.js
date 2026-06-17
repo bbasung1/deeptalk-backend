@@ -149,6 +149,7 @@ function serializePost(post) {
         quote_type: post.quote_type ?? null,
         quote_num: post.quote_num ?? 0,
         draft: post.draft ?? 0,
+        notify_mute: Boolean(post.notify_mute),
 
         // --- 통계 ---
         like: post.like ?? 0,
