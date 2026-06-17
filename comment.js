@@ -153,8 +153,8 @@ router.get("/", async (req, res) => {
         }
 
         //  대상 테이블 결정
-        const targetTable = type === 0 ? "talk" : "think";
-        const postColumn = type === 0 ? "talk_num" : "think_num";
+        const targetTable = type === 0 ? "talk" : (type === 1 ? "think" : "comment");
+        const postColumn = type === 0 ? "talk_num" : (type === 1 ? "think_num" : "comment_num");
 
         //  게시글 존재 여부 확인
         const post = await knex(targetTable)
