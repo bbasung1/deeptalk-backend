@@ -99,4 +99,49 @@ router.post("/", upload.array("files", 6), async (req, res) => {
     }
 });
 
+// 내가 쓴 글의 반응(좋아요/댓글) 알림을 게시물 단위로 뮤트/해제
+router.patch("/:mode/:id/mute", async (req, res) => {
+    const { mode, id } = req.params;
+    if (!["Jam-Talk", "Jin-Talk"].includes(mode)) {
+        return res.status(400).json({ success: false, message: "유효하지 않은 mode입니다." });
+    }
+
+    const post_id = parseInt(id);
+    if (isNaN(post_id)) {
+        return res.status(400).json({ success: false, message: "유효하지 않은 id입니다." });
+    }
+
+    const writer_id = await define_id(req.headers.authorization, res);
+    if (!writer_id) {
+        return res.status(401).json({ success: false, message: "로그인이 필요합니다." });
+    }
+
+    if (typeof req.body.mute === "undefined") {
+        return res.status(400).json({ success: false, message: "mute 값이 필요합니다." });
+    }
+    const mute = (req.body.mute === true || req.body.mute === 1 || req.body.mute === "1") ? 1 : 0;
+
+    const table = mode === "Jam-Talk" ? "talk" : "think";
+    const idColumn = mode === "Jam-Talk" ? "talk_num" : "think_num";
+
+    try {
+        const existing = await knex(table).where(idColumn, post_id).select("writer_id").first();
+        // 글이 없거나 내 글이 아닌 경우 동일하게 404로 응답 (존재 여부 추측 방지)
+        // JWT sub는 문자열이고 DB writer_id는 숫자이므로 형변환 후 비교
+        if (!existing || Number(existing.writer_id) !== Number(writer_id)) {
+            return res.status(404).json({ success: false, message: "글을 찾을 수 없습니다." });
+        }
+
+        await knex(table).where(idColumn, post_id).update({ notify_mute: mute });
+        return res.json({
+            success: true,
+            notify_mute: Boolean(mute),
+            message: mute ? "반응 알림을 뮤트했습니다." : "반응 알림 뮤트를 해제했습니다."
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ success: false, message: "서버 오류가 발생했습니다." });
+    }
+});
+
 module.exports = router;
