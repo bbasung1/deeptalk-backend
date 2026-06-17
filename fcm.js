@@ -66,7 +66,7 @@ async function sendReactionNotification({ table, postNum, actorId, actorNickname
 
         if (!post) return;
         if (post.notify_mute) return; // 작성자가 반응 알림을 뮤트한 게시물
-        if (post.writer_id === actorId) return; // 자기 글에 자기가 반응한 경우는 알림 발송 안함
+        if (Number(post.writer_id) === Number(actorId)) return; // 자기 글에 자기가 반응한 경우는 알림 발송 안함
 
         const tokenRows = await knex("fcm_token")
             .where("our_id", post.writer_id)

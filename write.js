@@ -127,7 +127,8 @@ router.patch("/:mode/:id/mute", async (req, res) => {
     try {
         const existing = await knex(table).where(idColumn, post_id).select("writer_id").first();
         // 글이 없거나 내 글이 아닌 경우 동일하게 404로 응답 (존재 여부 추측 방지)
-        if (!existing || existing.writer_id !== writer_id) {
+        // JWT sub는 문자열이고 DB writer_id는 숫자이므로 형변환 후 비교
+        if (!existing || Number(existing.writer_id) !== Number(writer_id)) {
             return res.status(404).json({ success: false, message: "글을 찾을 수 없습니다." });
         }
 
