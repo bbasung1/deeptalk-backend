@@ -80,9 +80,13 @@ router.post("/alram", (req, res) => {
   }
 })
 
-router.put("/id", (req, res) => {
+router.put("/id", async (req, res) => {
+  const id = await define_id(req.headers.authorization, res);
+  if (res.headersSent) return;
+  if (!id) return res.status(401).json({ success: 0, errmsg: "인증이 필요합니다." });
+
   knex("profile")
-    .where("user_id", req.body.original_id)
+    .where("id", id)
     .update({ user_id: req.body.change_id })
     .then(() => {
       res.status(200).json({ success: 1 })
@@ -138,15 +142,19 @@ router.post("/id_check", async (req, res) => {
 
 
 router.post("/nickname/register", async (req, res) => {
-  const { user_id, nickname } = req.body;
+  const id = await define_id(req.headers.authorization, res);
+  if (res.headersSent) return;
+  if (!id) return res.status(401).json({ message: "인증이 필요합니다." });
 
-  if (!user_id || !nickname) {
-    return res.status(400).json({ message: "user_id와 nickname을 입력하시오" });
+  const { nickname } = req.body;
+
+  if (!nickname) {
+    return res.status(400).json({ message: "nickname을 입력하시오" });
   }
 
   try {
     const updated = await knex("profile")
-      .where("user_id", user_id)
+      .where("id", id)
       .update({ nickname });
 
     if (updated === 0) {
@@ -204,19 +212,22 @@ router.post("/nickname", async (req, res) => {
 
 // 테마 설정
 router.post("/theme", async (req, res) => {
-  const { user_id, theme } = req.body;
+  const id = await define_id(req.headers.authorization, res);
+  if (res.headersSent) return;
+  if (!id) return res.status(401).json({ success: false, message: "인증이 필요합니다." });
 
-  // 입력값 유효성 검사
-  if (!user_id || theme === undefined) {
+  const { theme } = req.body;
+
+  if (theme === undefined) {
     return res.status(400).json({
       success: false,
-      message: "user_id와 theme 값이 필요합니다."
+      message: "theme 값이 필요합니다."
     });
   }
 
   try {
     const updated = await knex("profile")
-      .where({ user_id })
+      .where({ id })
       .update({ theme });
 
     if (updated === 0) {
