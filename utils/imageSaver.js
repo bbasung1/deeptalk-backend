@@ -13,14 +13,28 @@ const DEFAULT_DIR = process.env.FILE_DIR;
  * @param {string} folder - 저장될 폴더 경로(optional)
  * @returns {string} 저장된 파일의 절대 경로
  */
+const ALLOWED_EXTS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+
 async function saveImage(data, filename, folder = DEFAULT_DIR) {
     try {
+        const ext = path.extname(filename).toLowerCase();
+        if (!ALLOWED_EXTS.includes(ext)) {
+            throw new Error("허용되지 않는 파일 형식입니다.");
+        }
+
         // 폴더 없으면 자동 생성
         if (!fs.existsSync(folder)) {
             fs.mkdirSync(folder, { recursive: true });
         }
 
-        const filePath = path.join(folder, filename);
+        const safeFilename = path.basename(filename);
+        const resolvedFolder = path.resolve(folder);
+        const filePath = path.join(resolvedFolder, safeFilename);
+
+        // path traversal 방어: 최종 경로가 지정 폴더 안에 있는지 확인
+        if (!filePath.startsWith(resolvedFolder + path.sep)) {
+            throw new Error("유효하지 않은 파일 경로입니다.");
+        }
 
         // base64 문자열이면 변환
         if (typeof data === "string" && data.startsWith("data:image")) {
@@ -31,6 +45,7 @@ async function saveImage(data, filename, folder = DEFAULT_DIR) {
         }
 
         return filePath;
+
     } catch (err) {
         console.error("❌ saveImage error:", err);
         throw new Error("Failed to save image");

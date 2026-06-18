@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote } = require('./general.js');
+const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote, add_nickname } = require('./general.js');
+const { sendReactionNotification } = require('./fcm.js');
 const multer = require("multer");
 const upload = multer();
 const { saveImage, generateFilename } = require("./utils/imageSaver");
@@ -121,6 +122,18 @@ router.post("/", upload.array("files", 6), async (req, res) => {
             success: true,
             message: "댓글이 등록되었습니다."
         });
+
+        // 게시물 작성자에게 반응 알림 발송 (응답 블로킹 방지를 위해 await 생략, talk/think에만 해당)
+        if (targetTable === "talk" || targetTable === "think") {
+            const nickname = await add_nickname(our_id);
+            sendReactionNotification({
+                table: targetTable,
+                postNum: post_num,
+                actorId: our_id,
+                actorNickname: nickname,
+                reactionType: "comment"
+            });
+        }
     } catch (err) {
         console.error(err);
         res.status(500).json({
@@ -153,8 +166,8 @@ router.get("/", async (req, res) => {
         }
 
         //  대상 테이블 결정
-        const targetTable = type === 0 ? "talk" : "think";
-        const postColumn = type === 0 ? "talk_num" : "think_num";
+        const targetTable = type === 0 ? "talk" : (type === 1 ? "think" : "comment");
+        const postColumn = type === 0 ? "talk_num" : (type === 1 ? "think_num" : "comment_num");
 
         //  게시글 존재 여부 확인
         const post = await knex(targetTable)
@@ -171,6 +184,14 @@ router.get("/", async (req, res) => {
         //  댓글 쿼리 생성(준비)
         const commentQuery = knex("comment as p")
             .leftJoin("profile", "p.user_id", "profile.user_id")
+            // 내가 차단한 사람이 쓴 댓글은 제외
+            .whereNotIn("profile.id", function () {
+                this.select("blocked_user_id").from("block_list").where({ user_id: id, type: 0 });
+            })
+            // 나를 차단한 사람이 쓴 댓글도 제외
+            .whereNotIn("profile.id", function () {
+                this.select("user_id").from("block_list").where({ blocked_user_id: id, type: 0 });
+            })
             .select(
                 "comment_num AS comment_id",
                 "p.user_id as user_id",
@@ -211,6 +232,66 @@ router.get("/", async (req, res) => {
             success: true,
             comment_count: comments.length,
             comments
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({
+            success: false,
+            message: "댓글 조회 중 서버 오류가 발생했습니다."
+        });
+    }
+});
+
+// 댓글 단건 조회
+router.get("/:comment_id", async (req, res) => {
+    try {
+        let id = null;
+        if (req.headers.authorization) {
+            id = await define_id(req.headers.authorization, res);
+        }
+        const comment_id = parseInt(req.params.comment_id);
+
+        if (isNaN(comment_id)) {
+            return res.status(400).json({
+                success: false,
+                message: "유효하지 않은 comment_id입니다."
+            });
+        }
+
+        const comment = await knex("comment as p")
+            .leftJoin("profile", "p.user_id", "profile.user_id")
+            .select(
+                "comment_num AS comment_id",
+                "p.user_id as user_id",
+                "subject",
+                "like",
+                "quote_num AS quotes",
+                "bookmarks",
+                "timestamp",
+                "profile.nickname",
+                "profile.image as profile_image",
+                "photo",
+                "photo_1",
+                "photo_2",
+                "photo_3",
+                "photo_4",
+                "photo_5",
+                "vote",
+                ...islikeandbookmark(id, "comment", 2)
+            )
+            .where("comment_num", comment_id)
+            .first();
+
+        if (!comment) {
+            return res.status(404).json({
+                success: false,
+                message: "해당 댓글이 존재하지 않습니다."
+            });
+        }
+
+        return res.json({
+            success: true,
+            comment
         });
     } catch (err) {
         console.error(err);

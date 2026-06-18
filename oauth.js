@@ -3,12 +3,38 @@ const router = express.Router();
 const dotenv = require("dotenv");
 const axios = require("axios");
 const jwt = require("jsonwebtoken");
+const jwksRsa = require("jwks-rsa");
 const knex = require("./knex.js");
 const qs = require("querystring");
 const fs = require('fs');
 const mailer = require("nodemailer");
-const { decode } = require("punycode");
 const { define_id, tmp_convert_our_id, make_code } = require('./general.js')
+
+const kakaoJwksClient = jwksRsa({
+  jwksUri: "https://kauth.kakao.com/.well-known/jwks.json",
+  cache: true,
+  cacheMaxAge: 600000,
+});
+
+const appleJwksClient = jwksRsa({
+  jwksUri: "https://appleid.apple.com/auth/keys",
+  cache: true,
+  cacheMaxAge: 600000,
+});
+
+function verifyWithJwks(client, token, options) {
+  return new Promise((resolve, reject) => {
+    const header = jwt.decode(token, { complete: true })?.header;
+    if (!header) return reject(new Error("토큰 헤더 파싱 실패"));
+    client.getSigningKey(header.kid, (err, key) => {
+      if (err) return reject(err);
+      jwt.verify(token, key.getPublicKey(), options, (err, decoded) => {
+        if (err) return reject(err);
+        resolve(decoded);
+      });
+    });
+  });
+}
 const MEMBER_COUNT = 99999;
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -49,17 +75,15 @@ router.get("/kakao", (req, res) => {
   });
 });
 
-router.post("/kakao", (req, res) => {
+router.post("/kakao", async (req, res) => {
   let code = req.body.code;
   console.log(code);
-  axios
-    .post(
+  try {
+    const data1 = await axios.post(
       "https://kauth.kakao.com/oauth/token",
       {},
       {
-        headers: {
-          "Content-Type": `application/x-www-form-urlencoded`,
-        },
+        headers: { "Content-Type": `application/x-www-form-urlencoded` },
         params: {
           grant_type: "authorization_code",
           client_id: process.env.CLIENT_ID,
@@ -68,20 +92,25 @@ router.post("/kakao", (req, res) => {
           client_secret: process.env.KAKAO_CLIENT_SECRET,
         },
       }
-    )
-    .then((data1) => {
-      console.log(data1.data);
-      let kkoidtkn = jwt.decode(data1.data.id_token);
-      let access_token = data1.data.access_token;
-      knex.select("*").from("user").where("kakao_id", kkoidtkn.sub).then((userdata) => {
-        if (userdata) {
-          data1.data.registerd = 1;
-        } else {
-          data1.data.registerd = 0;
-        }
-        res.json(data1.data);
+    );
+    console.log(data1.data);
+    let kkoidtkn;
+    try {
+      kkoidtkn = await verifyWithJwks(kakaoJwksClient, data1.data.id_token, {
+        issuer: "https://kauth.kakao.com",
+        audience: process.env.CLIENT_ID,
       });
-    })
+    } catch (err) {
+      console.error("카카오 id_token 검증 실패:", err);
+      return res.status(401).json({ success: 0, msg: "유효하지 않은 카카오 토큰입니다." });
+    }
+    const userdata = await knex.select("*").from("user").where("kakao_id", kkoidtkn.sub);
+    data1.data.registerd = userdata.length > 0 ? 1 : 0;
+    res.json(data1.data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: 0, msg: "카카오 로그인 처리 중 오류 발생" });
+  }
 })
 
 router.get("/apple", (req, res) => {
@@ -118,13 +147,22 @@ const createSignWithAppleSecret = () => {
   return token;
 };
 
-router.post("/callback/apple", (req, res) => {
+router.post("/callback/apple", async (req, res) => {
   let appleidtoken = req.body.id_token;
-  let idtwk = jwt.decode(appleidtoken);
-  let applesub = idtwk.sub;
   let applecode = req.body.code;
-  axios
-    .post(
+  let applesub;
+  try {
+    const idtwk = await verifyWithJwks(appleJwksClient, appleidtoken, {
+      issuer: "https://appleid.apple.com",
+      audience: process.env.APPLE_CLIENT_ID,
+    });
+    applesub = idtwk.sub;
+  } catch (err) {
+    console.error("애플 id_token 검증 실패:", err);
+    return res.status(401).json({ success: 0, msg: "유효하지 않은 애플 토큰입니다." });
+  }
+  try {
+    const data1 = await axios.post(
       "https://appleid.apple.com/auth/token",
       qs.stringify({
         grant_type: "authorization_code",
@@ -133,17 +171,15 @@ router.post("/callback/apple", (req, res) => {
         client_id: process.env.APPLE_CLIENT_ID,
         redirect_uri: process.env.APPLE_LOGIN_REDIRECT_URI,
       }),
-      {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-      }
-    )
-    .then((data1) => {
-      let resinfo = data1.data;
-      console.log(resinfo);
-      res.json(resinfo);
-    });
+      { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+    );
+    let resinfo = data1.data;
+    console.log(resinfo);
+    res.json(resinfo);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: 0, msg: "애플 토큰 교환 중 오류 발생" });
+  }
 });
 
 router.get("/callback/discord", async (req, res) => {
@@ -225,6 +261,14 @@ router.put("/signup", async (req, res) => {
   let decodetoken = jwt.decode(tkn);
   console.log(decodetoken);
   let iss = decodetoken.iss;
+  // jamdeeptalk.com이 발급자라고 주장하는 토큰은 서명 검증해서 위조 여부 확인
+  if (iss == "jamdeeptalk.com") {
+    try {
+      decodetoken = jwt.verify(tkn, process.env.JWT_SECRET, { issuer: 'jamdeeptalk.com' });
+    } catch (err) {
+      return res.status(401).json({ success: 0, msg: "유효하지 않은 토큰입니다." });
+    }
+  }
   const trx = await knex.transaction();
   // const member = await knex("user").whereNull("deletetime").count({ "member": "*" });
   // if (MEMBER_COUNT < member[0].member) {
@@ -299,7 +343,7 @@ router.put("/signup", async (req, res) => {
 });
 
 router.delete("/account", async (req, res) => {
-  ourid = await define_id(req.headers.authorization, res);
+  let ourid = await define_id(req.headers.authorization, res);
   console.log(req.body);
   console.log(ourid);
   const reason = req.body.reason;
@@ -335,6 +379,14 @@ router.post("/login", async (req, res) => {
   let decodetoken = jwt.decode(tkn);
   console.log(decodetoken);
   let iss = decodetoken.iss;
+  // jamdeeptalk.com이 발급자라고 주장하는 토큰은 서명 검증해서 위조 여부 확인
+  if (iss == "jamdeeptalk.com") {
+    try {
+      decodetoken = jwt.verify(tkn, process.env.JWT_SECRET, { issuer: 'jamdeeptalk.com' });
+    } catch (err) {
+      return res.status(401).json({ success: 0, msg: "유효하지 않은 토큰입니다." });
+    }
+  }
   let sub = decodetoken.sub;
   if (iss == "https://kauth.kakao.com") {
     knex
@@ -443,10 +495,10 @@ router.post("/login", async (req, res) => {
     }
     const token = jwt.sign({ email: decodetoken.email, sub: sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
     await knex("user").update({ our_jwt: token }).where("id", sub)
-    let [is_delete] = await knex("user").select("deletetime").where("id", sub).first();
+    let is_delete = await knex("user").select("deletetime").where("id", sub).first();
     let willdelete = 0;
     let deletetime = null;
-    if (is_delete.deletetime != null) {
+    if (is_delete && is_delete.deletetime != null) {
       willdelete = 1;
       deletetime = is_delete.deletetime;
     }
@@ -484,11 +536,20 @@ router.get("/member_check", async (req, res) => {
   const token = req.headers.authorization.split("Bearer ")[1]
   console.log("token")
   console.log(token);
-  const tokendata = jwt.decode(token);
+  let tokendata = jwt.decode(token);
   console.log(tokendata)
   const iss = tokendata.iss;
-  const sub = tokendata.sub;
+  let sub = tokendata.sub;
   let type = "";
+  // jamdeeptalk.com이 발급자라고 주장하는 토큰은 서명 검증해서 위조 여부 확인
+  if (iss == "jamdeeptalk.com") {
+    try {
+      tokendata = jwt.verify(token, process.env.JWT_SECRET, { issuer: 'jamdeeptalk.com' });
+    } catch (err) {
+      return res.status(401).json({ is_member: 0 });
+    }
+    sub = tokendata.sub;
+  }
   if (iss == "https://kauth.kakao.com") {
     type = "kakao"
   } else if (iss == "https://appleid.apple.com") {
@@ -532,10 +593,11 @@ router.post("/mail_check", async (req, res) => {
     secure: false,
     auth: {
       user: "cozyhumansclub@gmail.com",
+      // user: "wbba1650@gmail.com",
       pass: process.env.GOOGLE_MAIL_PASSWORD,
     },
   });
-  let mailOptions = transporter.sendMail({
+  let mailOptions = {
     from: "test",
     to: mail_addr,
     subject: '[COZY HUMANS’ CLUB] 인증번호가 도착했습니다!',
@@ -545,7 +607,7 @@ router.post("/mail_check", async (req, res) => {
 해당 인증번호의 효력은 10분 동안만  유지됩니다.\n\n
 도움이 필요할 경우 아래 고객센터로 문의해 주세요.\n
 cozyhumansclub@gmail.com`,
-  });
+  };
   transporter.sendMail(mailOptions, function (error) {
     if (error) {
       console.log(error);
