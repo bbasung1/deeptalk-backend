@@ -7,7 +7,7 @@ router.use(express.urlencoded({ extended: true }));
 
 const { stream } = require("./log.js");
 const morgan = require("morgan");
-const { user_id_to_id, islikeandbookmark } = require("./general.js");
+const { user_id_to_id, islikeandbookmark, define_id, getBlockedIds } = require("./general.js");
 const { buildPostResponse } = require("./postSerializer.js");
 router.use(
     morgan(
@@ -45,5 +45,49 @@ router.post("/", async (req, res) => {
         res.json(user);
     }
 })
+
+// 내가 작성한 인용 목록 (talk + think, 차단 유저 게시물 제외)
+router.post("/quote_list", async (req, res) => {
+    const page = req.body.page || 0;
+
+    let requester_id = null;
+    if (req.headers.authorization) {
+        requester_id = await define_id(req.headers.authorization, res);
+        if (res.headersSent) return;
+    }
+    if (!requester_id) return res.status(401).json({ msg: "인증이 필요합니다." });
+
+    const blockedIds = await getBlockedIds(requester_id);
+
+    const blockFilter = function () {
+        if (blockedIds.length > 0) {
+            this.whereNotIn("writer_id", blockedIds);
+        }
+    };
+
+    const [talks, thinks] = await Promise.all([
+        knex("talk as p")
+            .leftJoin("profile", "p.writer_id", "profile.id")
+            .where("p.writer_id", requester_id)
+            .whereNotNull("p.quote")
+            .modify(blockFilter)
+            .select("p.*", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(requester_id, "talk", 0))
+            .orderBy("p.timestamp", "desc")
+            .limit(10)
+            .offset(page * 10),
+        knex("think as p")
+            .leftJoin("profile", "p.writer_id", "profile.id")
+            .where("p.writer_id", requester_id)
+            .whereNotNull("p.quote")
+            .modify(blockFilter)
+            .select("p.*", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(requester_id, "think", 1))
+            .orderBy("p.timestamp", "desc")
+            .limit(10)
+            .offset(page * 10),
+    ]);
+
+    const posts = await buildPostResponse([...talks, ...thinks], requester_id);
+    res.json(posts);
+});
 
 module.exports = router;

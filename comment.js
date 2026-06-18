@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote, add_nickname } = require('./general.js');
+const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote, add_nickname, getBlockedIds } = require('./general.js');
 const { sendReactionNotification } = require('./fcm.js');
 const multer = require("multer");
 const upload = multer();
@@ -321,6 +321,61 @@ router.delete("/:comment_id", async (req, res) => {
         return res.status(500).json({ "success": 0, "msg": "삭제 과정에서 오류가 발생했습니다" });
     }
 })
+
+// 내가 작성한 댓글 목록 (차단 유저 게시물 제외)
+router.post("/list", async (req, res) => {
+    const page = req.body.page || 0;
+
+    let requester_id = null;
+    if (req.headers.authorization) {
+        requester_id = await define_id(req.headers.authorization, res);
+        if (res.headersSent) return;
+    }
+    if (!requester_id) return res.status(401).json({ msg: "인증이 필요합니다." });
+
+    const blockedIds = await getBlockedIds(requester_id);
+
+    const comments = await knex("comment as c")
+        .leftJoin("profile", "c.user_id", "profile.user_id")
+        .where("profile.id", requester_id)
+        .modify(function (qb) {
+            if (blockedIds.length > 0) {
+                // 원글(talk/think) 작성자가 차단 관계인 댓글 제외
+                // c.type=0 이면 talk, c.type=1 이면 think 테이블에서 writer_id 확인
+                qb.where(function () {
+                    // talk에 달린 댓글 중 차단 유저 게시물 제외
+                    this.whereNot(function () {
+                        this.where("c.type", 0)
+                            .whereIn("c.post_num", function () {
+                                this.select("talk_num").from("talk").whereIn("writer_id", blockedIds);
+                            });
+                    })
+                    // think에 달린 댓글 중 차단 유저 게시물 제외
+                    .whereNot(function () {
+                        this.where("c.type", 1)
+                            .whereIn("c.post_num", function () {
+                                this.select("think_num").from("think").whereIn("writer_id", blockedIds);
+                            });
+                    })
+                    // 댓글에 달린 댓글 중 차단 유저 댓글 제외
+                    .whereNot(function () {
+                        this.where("c.type", 2)
+                            .whereIn("c.post_num", function () {
+                                this.select("comment_num").from("comment as parent")
+                                    .join("profile as pp", "parent.user_id", "pp.user_id")
+                                    .whereIn("pp.id", blockedIds);
+                            });
+                    });
+                });
+            }
+        })
+        .select("c.*", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(requester_id, "comment", 2))
+        .orderBy("c.timestamp", "desc")
+        .limit(10)
+        .offset(page * 10);
+
+    res.json(comments);
+});
 
 // 공용 업데이트 함수
 async function updateCount(res, comment_id, field, increment) {

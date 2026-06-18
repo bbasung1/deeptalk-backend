@@ -259,11 +259,28 @@ function toKstDatetime(isoString) {
     return kstDate.toISOString().slice(0, 19).replace('T', ' ');
 }
 
+// 양방향 차단 관계인 writer_id 목록 반환 (block_list type=0)
+async function getBlockedIds(id) {
+    const rows = await knex("block_list")
+        .where(function () {
+            this.where({ user_id: id, type: 0 })
+                .orWhere({ blocked_user_id: id, type: 0 });
+        })
+        .select("user_id", "blocked_user_id");
+    const ids = new Set();
+    for (const row of rows) {
+        if (row.user_id === id) ids.add(row.blocked_user_id);
+        else ids.add(row.user_id);
+    }
+    return [...ids];
+}
+
 module.exports = {
     convert_our_id,
     define_id,
     tmp_convert_our_id,
     handleBlockAction,
+    getBlockedIds,
     make_code,
     add_nickname,
     id_to_user_id,
