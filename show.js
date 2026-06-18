@@ -121,7 +121,10 @@ router.get("/comment/:comment_id", async (req, res) => {
     if (content) {
         if (requester_id) {
             const blocked = await knex("block_list")
-                .where({ user_id: content.writer_profile_id, blocked_user_id: requester_id, type: 0 })
+                .where(function () {
+                    this.where({ user_id: content.writer_profile_id, blocked_user_id: requester_id, type: 0 })
+                        .orWhere({ user_id: requester_id, blocked_user_id: content.writer_profile_id, type: 0 });
+                })
                 .first();
             if (blocked) {
                 return res.status(403).json({ msg: "댓글을 조회할 수 없습니다.", code: "4031" });
