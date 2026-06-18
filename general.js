@@ -169,6 +169,9 @@ async function id_to_user_id(id) {
         return null;
     }
     const user_id_data = await knex("profile").select("user_id").where("id", id).first();
+    if (user_id_data == undefined) {
+        return null;
+    }
     return user_id_data.user_id
 }
 
@@ -177,7 +180,7 @@ async function user_id_to_id(user_id) {
         return null;
     }
     const id_data = await knex("profile").select("id").where("user_id", user_id).first();
-    if (id_data.id == undefined) {
+    if (id_data == undefined || id_data.id == undefined) {
         return null;
     }
     return id_data.id
