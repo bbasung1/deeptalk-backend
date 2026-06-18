@@ -71,22 +71,36 @@ router.post("/quote_list", async (req, res) => {
             .where("p.writer_id", requester_id)
             .whereNotNull("p.quote")
             .modify(blockFilter)
-            .select("p.*", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(requester_id, "talk", 0))
-            .orderBy("p.timestamp", "desc")
-            .limit(10)
-            .offset(page * 10),
+            .select(
+                "p.talk_num", "p.writer_id", "p.user_id", "p.header", "p.subject",
+                "p.like", "p.comment", "p.views", "p.mylist", "p.quote_num",
+                "p.quote", "p.quote_type", "p.photo", "p.photo_1", "p.photo_2",
+                "p.photo_3", "p.photo_4", "p.photo_5", "p.vote", "p.draft",
+                "p.notify_mute", "p.timestamp",
+                "profile.nickname", "profile.image as profile_image",
+                ...islikeandbookmark(requester_id, "talk", 0)
+            ),
         knex("think as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where("p.writer_id", requester_id)
             .whereNotNull("p.quote")
             .modify(blockFilter)
-            .select("p.*", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(requester_id, "think", 1))
-            .orderBy("p.timestamp", "desc")
-            .limit(10)
-            .offset(page * 10),
+            .select(
+                "p.think_num", "p.writer_id", "p.user_id", "p.header", "p.subject",
+                "p.like", "p.comment", "p.views", "p.mylist", "p.quote_num",
+                "p.quote", "p.quote_type", "p.photo", "p.photo_1", "p.photo_2",
+                "p.photo_3", "p.photo_4", "p.photo_5", "p.vote", "p.draft",
+                "p.notify_mute", "p.timestamp",
+                "profile.nickname", "profile.image as profile_image",
+                ...islikeandbookmark(requester_id, "think", 1)
+            ),
     ]);
 
-    const posts = await buildPostResponse([...talks, ...thinks], requester_id);
+    const merged = [...talks, ...thinks]
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(page * 10, (page + 1) * 10);
+
+    const posts = await buildPostResponse(merged, requester_id);
     res.json(posts);
 });
 
