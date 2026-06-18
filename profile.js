@@ -31,8 +31,8 @@ router.post("/info", async (req, res) => {
   }
 
   const data = await knex("profile").select("*").where("user_id", user_id).first();
-  if (data.length == 0) {
-    return res.status(500).json({ msg: "user_id를 찾을수 없습니다." })
+  if (!data) {
+    return res.status(404).json({ msg: "user_id를 찾을수 없습니다." })
   }
   console.log(requester_id);
   console.log(req.body.user_id);
@@ -46,6 +46,25 @@ router.post("/info", async (req, res) => {
     if (blocked) {
       return res.status(403).json({ msg: "프로필을 조회할 수 없습니다.", code: "4031" });
     }
+  }
+
+  // 본인이 조회하는 경우에는 비공개 설정과 무관하게 항상 정확한 수치를 보여줍니다.
+  const isOwner = requester_id != null && Number(requester_id) === Number(data.id);
+
+  // DB(TINYINT)에서 0/1로 내려오므로 응답에서는 명확한 boolean으로 변환합니다.
+  data.hide_follow_list = Boolean(data.hide_follow_list);
+
+  if (data.hide_follow_list && !isOwner) {
+    // 비공개 설정 시 숫자도 노출하지 않습니다 (목록 조회 API와 동일한 정책).
+    data.follow_count = null;
+    data.follower_count = null;
+  } else {
+    const [[{ follow_count }], [{ follower_count }]] = await Promise.all([
+      knex("follow").where("user_id", data.id).count({ follow_count: "*" }),
+      knex("follow").where("friend_id", data.id).count({ follower_count: "*" }),
+    ]);
+    data.follow_count = Number(follow_count);
+    data.follower_count = Number(follower_count);
   }
 
   delete data["servicealram"];
