@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote, add_nickname, getBlockedIds } = require('./general.js');
-const { sendReactionNotification } = require('./fcm.js');
+const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote, add_nickname, getBlockedIds, extractMentionedIds } = require('./general.js');
+const { sendReactionNotification, sendMentionNotification } = require('./fcm.js');
 const multer = require("multer");
 const upload = multer();
 const { saveImage, generateFilename } = require("./utils/imageSaver");
@@ -124,8 +124,8 @@ router.post("/", upload.array("files", 6), async (req, res) => {
         });
 
         // 게시물 작성자에게 반응 알림 발송 (응답 블로킹 방지를 위해 await 생략, talk/think에만 해당)
+        const nickname = await add_nickname(our_id);
         if (targetTable === "talk" || targetTable === "think") {
-            const nickname = await add_nickname(our_id);
             sendReactionNotification({
                 table: targetTable,
                 postNum: post_num,
@@ -134,6 +134,20 @@ router.post("/", upload.array("files", 6), async (req, res) => {
                 reactionType: "comment"
             });
         }
+
+        // 본문에 포함된 "@user_id" 멘션 처리 (응답 블로킹 방지를 위해 await 생략)
+        extractMentionedIds(subject, our_id).then(async (mentionedIds) => {
+            if (mentionedIds.length === 0) return;
+            await knex("mention").insert(
+                mentionedIds.map(mentioned_id => ({
+                    mentioner_id: our_id,
+                    mentioned_id,
+                    post_type: 2,
+                    post_num: comment_num
+                }))
+            );
+            sendMentionNotification({ mentionedIds, actorNickname: nickname });
+        }).catch(err => console.error("멘션 처리 실패:", err));
     } catch (err) {
         console.error(err);
         res.status(500).json({

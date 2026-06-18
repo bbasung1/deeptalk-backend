@@ -275,12 +275,39 @@ async function getBlockedIds(id) {
     return [...ids];
 }
 
+// 본문에서 "@user_id" 형태의 멘션을 추출.
+// user_id 형식을 강제하는 별도 검증 로직이 코드상 확인되지 않아 보수적으로 제한.
+// 영문/숫자/언더스코어/하이픈/점만 허용하고 길이를 제한해 ReDoS 및 과도한 매칭을 방지.
+const MENTION_REGEX = /@([a-zA-Z0-9_.-]{1,30})/g;
+
+// 본문 텍스트에서 멘션된 유저들의 id 목록을 반환합니다.
+// - 존재하지 않는 user_id, 작성자 자기 자신, 차단 관계인 유저는 제외합니다.
+// - mentionerId는 글/댓글 작성자의 internal id 입니다.
+async function extractMentionedIds(text, mentionerId) {
+    if (!text || typeof text !== "string") return [];
+
+    const handles = [...new Set([...text.matchAll(MENTION_REGEX)].map(m => m[1]))];
+    if (handles.length === 0) return [];
+
+    const profiles = await knex("profile").select("id").whereIn("user_id", handles);
+    let ids = profiles.map(p => p.id).filter(id => Number(id) !== Number(mentionerId));
+    if (ids.length === 0) return [];
+
+    const blockedIds = await getBlockedIds(mentionerId);
+    if (blockedIds.length > 0) {
+        const blockedSet = new Set(blockedIds.map(Number));
+        ids = ids.filter(id => !blockedSet.has(Number(id)));
+    }
+    return ids;
+}
+
 module.exports = {
     convert_our_id,
     define_id,
     tmp_convert_our_id,
     handleBlockAction,
     getBlockedIds,
+    extractMentionedIds,
     make_code,
     add_nickname,
     id_to_user_id,
