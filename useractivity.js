@@ -75,6 +75,7 @@ router.post("/quote_list", async (req, res) => {
     }
     if (!requester_id) return res.status(401).json({ msg: "인증이 필요합니다." });
 
+    try {
     const blockedIds = await getBlockedIds(requester_id);
 
     // 인용된 원본 게시물 작성자가 차단 관계인 경우 제외
@@ -142,6 +143,10 @@ router.post("/quote_list", async (req, res) => {
 
     const posts = await buildPostResponse(merged, requester_id);
     res.json(posts);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ msg: "서버 오류가 발생했습니다." });
+    }
 });
 
 module.exports = router;
