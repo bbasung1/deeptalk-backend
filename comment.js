@@ -210,6 +210,7 @@ router.get("/", async (req, res) => {
                 "photo_5",
                 "vote",
                 knex.raw("(`like` * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity"),
+                knex.raw("(SELECT COUNT(*) FROM comment AS r WHERE r.type = 2 AND r.post_num = p.comment_num) AS reply_count"),
                 ...islikeandbookmark(id, "comment", 2) // 가상의 Column
             )
             .where({ type, post_num });
@@ -277,6 +278,7 @@ router.get("/:comment_id", async (req, res) => {
                 "photo_4",
                 "photo_5",
                 "vote",
+                knex.raw("(SELECT COUNT(*) FROM comment AS r WHERE r.type = 2 AND r.post_num = p.comment_num) AS reply_count"),
                 ...islikeandbookmark(id, "comment", 2)
             )
             .where("comment_num", comment_id)
