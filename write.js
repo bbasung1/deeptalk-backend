@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, id_to_user_id, add_nickname, regist_file, regist_quote, regist_vote } = require('./general.js');
-const { sendPostNotification } = require('./fcm.js');
+const { define_id, id_to_user_id, add_nickname, regist_file, regist_quote, regist_vote, extractMentionedIds } = require('./general.js');
+const { sendPostNotification, sendMentionNotification } = require('./fcm.js');
 const multer = require("multer");
 const upload = multer();
 const { saveImage, generateFilename, } = require("./utils/imageSaver");
@@ -92,6 +92,21 @@ router.post("/", upload.array("files", 6), async (req, res) => {
         // 팔로워에게 FCM 알림 발송 (응답 블로킹 방지를 위해 await 생략)
         const nickname = await add_nickname(writer_id);
         sendPostNotification(writer_id, nickname, mode);
+
+        // 본문에 포함된 "@user_id" 멘션 처리 (응답 블로킹 방지를 위해 await 생략)
+        const post_type = (mode === "Jam-Talk") ? 0 : 1;
+        extractMentionedIds(subject, writer_id).then(async (mentionedIds) => {
+            if (mentionedIds.length === 0) return;
+            await knex("mention").insert(
+                mentionedIds.map(mentioned_id => ({
+                    mentioner_id: writer_id,
+                    mentioned_id,
+                    post_type,
+                    post_num
+                }))
+            );
+            sendMentionNotification({ mentionedIds, actorNickname: nickname });
+        }).catch(err => console.error("멘션 처리 실패:", err));
     } catch (err) {
         await trx.rollback();
         console.error(err);

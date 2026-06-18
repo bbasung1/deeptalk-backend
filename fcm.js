@@ -92,6 +92,33 @@ async function sendReactionNotification({ table, postNum, actorId, actorNickname
     }
 }
 
+// 멘션 당한 유저들에게 알림 발송 (mentionedIds는 신뢰 가능한 internal id 배열이어야 함)
+async function sendMentionNotification({ mentionedIds, actorNickname }) {
+    try {
+        if (!Array.isArray(mentionedIds) || mentionedIds.length === 0) return;
+
+        const tokenRows = await knex("fcm_token")
+            .whereIn("our_id", mentionedIds)
+            .select("fcm_token");
+
+        if (tokenRows.length === 0) return;
+        const tokens = tokenRows.map(row => row.fcm_token);
+
+        const message = {
+            notification: {
+                title: `${actorNickname}님이 회원님을 언급했습니다.`,
+                body: "지금 확인해보세요!",
+            },
+            tokens,
+        };
+
+        const response = await admin.messaging().sendEachForMulticast(message);
+        console.log(`멘션 알림 발송 완료 - 성공: ${response.successCount}, 실패: ${response.failureCount}`);
+    } catch (err) {
+        console.error("멘션 알림 발송 실패:", err);
+    }
+}
+
 router.post("/token", async (req, res) => {
     const our_id = await define_id(req.headers.authorization, res);
     if (!our_id) {
@@ -118,3 +145,4 @@ router.get("/test", async (req, res) => {
 module.exports = router;
 module.exports.sendPostNotification = sendPostNotification;
 module.exports.sendReactionNotification = sendReactionNotification;
+module.exports.sendMentionNotification = sendMentionNotification;
