@@ -371,7 +371,29 @@ router.post("/list", async (req, res) => {
                 });
             }
         })
-        .select("c.*", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(requester_id, "comment", 2))
+        .select(
+            "c.comment_num AS comment_id",
+            "c.user_id",
+            "c.subject",
+            "c.like",
+            "c.quote_num AS quotes",
+            "c.bookmarks",
+            "c.timestamp",
+            "c.type",
+            "c.post_num",
+            "c.photo",
+            "c.photo_1",
+            "c.photo_2",
+            "c.photo_3",
+            "c.photo_4",
+            "c.photo_5",
+            "c.vote",
+            "c.reported",
+            "profile.nickname",
+            "profile.image as profile_image",
+            knex.raw("(SELECT COUNT(*) FROM comment AS r WHERE r.type = 2 AND r.post_num = c.comment_num) AS reply_count"),
+            ...islikeandbookmark(requester_id, "comment", 2)
+        )
         .orderBy("c.timestamp", "desc")
         .limit(10)
         .offset(page * 10);
