@@ -335,70 +335,75 @@ router.post("/list", async (req, res) => {
     }
     if (!requester_id) return res.status(401).json({ msg: "인증이 필요합니다." });
 
-    const blockedIds = await getBlockedIds(requester_id);
+    try {
+        const blockedIds = await getBlockedIds(requester_id);
 
-    const comments = await knex("comment as c")
-        .leftJoin("profile", "c.user_id", "profile.user_id")
-        .where("profile.id", requester_id)
-        .modify(function (qb) {
-            if (blockedIds.length > 0) {
-                // 원글(talk/think) 작성자가 차단 관계인 댓글 제외
-                // c.type=0 이면 talk, c.type=1 이면 think 테이블에서 writer_id 확인
-                qb.where(function () {
-                    // talk에 달린 댓글 중 차단 유저 게시물 제외
-                    this.whereNot(function () {
-                        this.where("c.type", 0)
-                            .whereIn("c.post_num", function () {
-                                this.select("talk_num").from("talk").whereIn("writer_id", blockedIds);
-                            });
-                    })
-                    // think에 달린 댓글 중 차단 유저 게시물 제외
-                    .whereNot(function () {
-                        this.where("c.type", 1)
-                            .whereIn("c.post_num", function () {
-                                this.select("think_num").from("think").whereIn("writer_id", blockedIds);
-                            });
-                    })
-                    // 댓글에 달린 댓글 중 차단 유저 댓글 제외
-                    .whereNot(function () {
-                        this.where("c.type", 2)
-                            .whereIn("c.post_num", function () {
-                                this.select("comment_num").from("comment as parent")
-                                    .join("profile as pp", "parent.user_id", "pp.user_id")
-                                    .whereIn("pp.id", blockedIds);
-                            });
+        const comments = await knex("comment as c")
+            .leftJoin("profile", "c.user_id", "profile.user_id")
+            .where("profile.id", requester_id)
+            .modify(function (qb) {
+                if (blockedIds.length > 0) {
+                    // 원글(talk/think) 작성자가 차단 관계인 댓글 제외
+                    // c.type=0 이면 talk, c.type=1 이면 think 테이블에서 writer_id 확인
+                    qb.where(function () {
+                        // talk에 달린 댓글 중 차단 유저 게시물 제외
+                        this.whereNot(function () {
+                            this.where("c.type", 0)
+                                .whereIn("c.post_num", function () {
+                                    this.select("talk_num").from("talk").whereIn("writer_id", blockedIds);
+                                });
+                        })
+                        // think에 달린 댓글 중 차단 유저 게시물 제외
+                        .whereNot(function () {
+                            this.where("c.type", 1)
+                                .whereIn("c.post_num", function () {
+                                    this.select("think_num").from("think").whereIn("writer_id", blockedIds);
+                                });
+                        })
+                        // 댓글에 달린 댓글 중 차단 유저 댓글 제외
+                        .whereNot(function () {
+                            this.where("c.type", 2)
+                                .whereIn("c.post_num", function () {
+                                    this.select("comment_num").from("comment as parent")
+                                        .join("profile as pp", "parent.user_id", "pp.user_id")
+                                        .whereIn("pp.id", blockedIds);
+                                });
+                        });
                     });
-                });
-            }
-        })
-        .select(
-            "c.comment_num AS comment_id",
-            "c.user_id",
-            "c.subject",
-            "c.like",
-            "c.quote_num AS quotes",
-            "c.bookmarks",
-            "c.timestamp",
-            "c.type",
-            "c.post_num",
-            "c.photo",
-            "c.photo_1",
-            "c.photo_2",
-            "c.photo_3",
-            "c.photo_4",
-            "c.photo_5",
-            "c.vote",
-            "c.reported",
-            "profile.nickname",
-            "profile.image as profile_image",
-            knex.raw("(SELECT COUNT(*) FROM comment AS r WHERE r.type = 2 AND r.post_num = c.comment_num) AS reply_count"),
-            ...islikeandbookmark(requester_id, "comment", 2)
-        )
-        .orderBy("c.timestamp", "desc")
-        .limit(10)
-        .offset(page * 10);
+                }
+            })
+            .select(
+                "c.comment_num AS comment_id",
+                "c.user_id",
+                "c.subject",
+                "c.like",
+                "c.quote_num AS quotes",
+                "c.bookmarks",
+                "c.timestamp",
+                "c.type",
+                "c.post_num",
+                "c.photo",
+                "c.photo_1",
+                "c.photo_2",
+                "c.photo_3",
+                "c.photo_4",
+                "c.photo_5",
+                "c.vote",
+                "c.reported",
+                "profile.nickname",
+                "profile.image as profile_image",
+                knex.raw("(SELECT COUNT(*) FROM comment AS r WHERE r.type = 2 AND r.post_num = c.comment_num) AS reply_count"),
+                ...islikeandbookmark(requester_id, "comment", 2)
+            )
+            .orderBy("c.timestamp", "desc")
+            .limit(10)
+            .offset(page * 10);
 
-    res.json(comments);
+        res.json(comments);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, msg: "서버 오류가 발생했습니다." });
+    }
 });
 
 // 공용 업데이트 함수
