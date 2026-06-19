@@ -275,6 +275,32 @@ async function getBlockedIds(id) {
     return [...ids];
 }
 
+// 댓글 체인(대댓글의 대댓글 ...)을 따라 위로 올라가 최상위 게시글(talk/think)
+// 작성자의 profile.id를 반환합니다.
+// type: 0(talk), 1(think), 2(comment) / post_num: 해당 글 또는 부모 댓글의 번호.
+// MAX_DEPTH로 체인 길이를 제한해 잘못된 데이터로 인한 무한 루프를 방지합니다.
+async function getOriginalPostWriterId(type, post_num) {
+    let curType = type;
+    let curPostNum = post_num;
+    const MAX_DEPTH = 30;
+
+    for (let depth = 0; depth < MAX_DEPTH; depth++) {
+        if (curType === 0) {
+            const row = await knex("talk").select("writer_id").where("talk_num", curPostNum).first();
+            return row ? row.writer_id : null;
+        }
+        if (curType === 1) {
+            const row = await knex("think").select("writer_id").where("think_num", curPostNum).first();
+            return row ? row.writer_id : null;
+        }
+        const parent = await knex("comment").select("type", "post_num").where("comment_num", curPostNum).first();
+        if (!parent) return null;
+        curType = parent.type;
+        curPostNum = parent.post_num;
+    }
+    return null;
+}
+
 // 본문에서 "@user_id" 형태의 멘션을 추출.
 // user_id 형식을 강제하는 별도 검증 로직이 코드상 확인되지 않아 보수적으로 제한.
 // 영문/숫자/언더스코어/하이픈/점만 허용하고 길이를 제한해 ReDoS 및 과도한 매칭을 방지.
@@ -308,6 +334,7 @@ module.exports = {
     handleBlockAction,
     getBlockedIds,
     extractMentionedIds,
+    getOriginalPostWriterId,
     make_code,
     add_nickname,
     id_to_user_id,

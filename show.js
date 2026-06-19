@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { user_id_to_id, islikeandbookmark, define_id } = require("./general.js");
+const { user_id_to_id, islikeandbookmark, define_id, getOriginalPostWriterId } = require("./general.js");
 const { buildPostResponse } = require("./postSerializer.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -28,8 +28,12 @@ async function getFollowListAccess(targetId, req, res) {
         return { blocked: false, hidden: false };
     }
     if (requester_id != null) {
+        // 양방향 차단 체크: 상대가 나를 차단했거나, 내가 상대를 차단한 경우 모두 차단으로 처리
         const blocked = await knex("block_list")
-            .where({ user_id: targetId, blocked_user_id: requester_id, type: 0 })
+            .where(function () {
+                this.where({ user_id: targetId, blocked_user_id: requester_id, type: 0 })
+                    .orWhere({ user_id: requester_id, blocked_user_id: targetId, type: 0 });
+            })
             .first();
         if (blocked) {
             return { blocked: true, hidden: false };
@@ -130,6 +134,8 @@ router.get("/comment/:comment_id", async (req, res) => {
                 return res.status(403).json({ msg: "댓글을 조회할 수 없습니다.", code: "4031" });
             }
         }
+        const originalWriterId = await getOriginalPostWriterId(content.type, content.post_num);
+        content.is_post_writer = originalWriterId != null && Number(content.writer_profile_id) === Number(originalWriterId);
         delete content.comment_num;
         delete content.writer_profile_id;
     }
