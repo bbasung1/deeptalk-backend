@@ -23,6 +23,7 @@ router.post("/", upload.array("files", 6), async (req, res) => {
     const post_num = parseInt(req.body.post_num);
     const { subject } = req.body;
     const our_id = await define_id(req.headers.authorization, res);
+    const draft = req.body.draft ?? 0;
     console.log(req.body);
     console.log(our_id);
     console.log(type);
@@ -94,8 +95,9 @@ router.post("/", upload.array("files", 6), async (req, res) => {
                 return res.status(500).json({ msg: "인용 과정에서 문제가 발생했습니다." })
             }
         }
-
-        await trx(targetTable).where(postColumn, post_num).increment("comment", 1);
+        if (draft === 0) {
+            await trx(targetTable).where(postColumn, post_num).increment("comment", 1);
+        }
         const [comment_num] = await trx("comment").insert({
             type,
             post_num,
@@ -104,7 +106,8 @@ router.post("/", upload.array("files", 6), async (req, res) => {
             reported: 0,
             ...photoFields,
             quote,
-            quote_type
+            quote_type,
+            draft
         });
         if (req.body.vote) {
             try {
@@ -120,7 +123,8 @@ router.post("/", upload.array("files", 6), async (req, res) => {
         await trx.commit();
         res.status(201).json({
             success: true,
-            message: "댓글이 등록되었습니다."
+            message: "댓글이 등록되었습니다.",
+            comment_num
         });
 
         // 게시물 작성자에게 반응 알림 발송 (응답 블로킹 방지를 위해 await 생략, talk/think에만 해당)
@@ -224,6 +228,7 @@ router.get("/", async (req, res) => {
                 "photo_4",
                 "photo_5",
                 "vote",
+                "draft",
                 knex.raw("(`like` * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity"),
                 knex.raw("(SELECT COUNT(*) FROM comment AS r WHERE r.type = 2 AND r.post_num = p.comment_num) AS reply_count"),
                 ...islikeandbookmark(id, "comment", 2) // 가상의 Column
@@ -293,6 +298,7 @@ router.get("/:comment_id", async (req, res) => {
                 "like",
                 "quote_num AS quotes",
                 "bookmarks",
+                "draft",
                 "timestamp",
                 "profile.nickname",
                 "profile.image as profile_image",
@@ -337,7 +343,7 @@ router.get("/:comment_id", async (req, res) => {
 
 router.delete("/:comment_id", async (req, res) => {
     const id = await define_id(req.headers.authorization, res);
-    const comment_data = await knex("comment").select("user_id", "type", "post_num").where("comment_num", req.params.comment_id).first();
+    const comment_data = await knex("comment").select("user_id", "type", "post_num", "draft").where("comment_num", req.params.comment_id).first();
     const comment_writer_id = await user_id_to_id(comment_data.user_id);
     if (id != comment_writer_id) {
         console.log(id);
@@ -348,7 +354,9 @@ router.delete("/:comment_id", async (req, res) => {
         const TargetTable = comment_data.type === 0 ? "talk" : "think";
         const postColumn = comment_data.type === 0 ? "talk_num" : "think_num";
         await knex("comment").where("comment_num", req.params.comment_id).delete();
-        await knex(TargetTable).where(postColumn, comment_data.post_num).decrement("comment", 1);
+        if (comment_data.draft === 0) {
+            await knex(TargetTable).where(postColumn, comment_data.post_num).decrement("comment", 1);
+        }
         return res.json({ "success": 1 })
     } catch {
         return res.status(500).json({ "success": 0, "msg": "삭제 과정에서 오류가 발생했습니다" });
@@ -384,22 +392,22 @@ router.post("/list", async (req, res) => {
                                     this.select("talk_num").from("talk").whereIn("writer_id", blockedIds);
                                 });
                         })
-                        // think에 달린 댓글 중 차단 유저 게시물 제외
-                        .whereNot(function () {
-                            this.where("c.type", 1)
-                                .whereIn("c.post_num", function () {
-                                    this.select("think_num").from("think").whereIn("writer_id", blockedIds);
-                                });
-                        })
-                        // 댓글에 달린 댓글 중 차단 유저 댓글 제외
-                        .whereNot(function () {
-                            this.where("c.type", 2)
-                                .whereIn("c.post_num", function () {
-                                    this.select("comment_num").from("comment as parent")
-                                        .join("profile as pp", "parent.user_id", "pp.user_id")
-                                        .whereIn("pp.id", blockedIds);
-                                });
-                        });
+                            // think에 달린 댓글 중 차단 유저 게시물 제외
+                            .whereNot(function () {
+                                this.where("c.type", 1)
+                                    .whereIn("c.post_num", function () {
+                                        this.select("think_num").from("think").whereIn("writer_id", blockedIds);
+                                    });
+                            })
+                            // 댓글에 달린 댓글 중 차단 유저 댓글 제외
+                            .whereNot(function () {
+                                this.where("c.type", 2)
+                                    .whereIn("c.post_num", function () {
+                                        this.select("comment_num").from("comment as parent")
+                                            .join("profile as pp", "parent.user_id", "pp.user_id")
+                                            .whereIn("pp.id", blockedIds);
+                                    });
+                            });
                     });
                 }
             })
