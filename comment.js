@@ -233,13 +233,7 @@ router.get("/", async (req, res) => {
                 knex.raw("(SELECT COUNT(*) FROM comment AS r WHERE r.type = 2 AND r.post_num = p.comment_num) AS reply_count"),
                 ...islikeandbookmark(id, "comment", 2) // 가상의 Column
             )
-            .where({ type, post_num })
-            // 임시저장(draft=1) 댓글은 작성자 본인에게만 노출
-            .where(function () {
-                this.where("p.draft", 0).orWhere(function () {
-                    this.where("p.draft", 1).andWhere("profile.id", id);
-                });
-            });
+            .where({ type, post_num });
 
         //  정렬 조건 추가
         if (sort === "popular") {
@@ -322,14 +316,6 @@ router.get("/:comment_id", async (req, res) => {
             .first();
 
         if (!comment) {
-            return res.status(404).json({
-                success: false,
-                message: "해당 댓글이 존재하지 않습니다."
-            });
-        }
-
-        // 임시저장(draft=1) 댓글은 작성자 본인에게만 노출 (존재 여부 노출 방지 위해 404로 응답)
-        if (comment.draft === 1 && (id == null || Number(id) !== Number(comment.writer_profile_id))) {
             return res.status(404).json({
                 success: false,
                 message: "해당 댓글이 존재하지 않습니다."
