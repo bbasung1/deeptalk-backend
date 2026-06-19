@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote, add_nickname, getBlockedIds, extractMentionedIds } = require('./general.js');
+const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote, add_nickname, getBlockedIds, extractMentionedIds, getOriginalPostWriterId } = require('./general.js');
 const { sendReactionNotification, sendMentionNotification } = require('./fcm.js');
 const multer = require("multer");
 const upload = multer();
@@ -209,6 +209,7 @@ router.get("/", async (req, res) => {
             .select(
                 "comment_num AS comment_id",
                 "p.user_id as user_id",
+                "profile.id as writer_profile_id",
                 "subject",
                 "like",
                 "quote_num AS quotes",
@@ -241,6 +242,13 @@ router.get("/", async (req, res) => {
 
         //  Knex 쿼리를 실제로 실행해서 결과를 가져오는 코드
         const comments = await commentQuery;
+
+        // 이 목록은 전부 같은 글(post_num)에 달린 댓글이므로, 원본 글 작성자는 한 번만 조회
+        const originalWriterId = await getOriginalPostWriterId(type, post_num);
+        for (const comment of comments) {
+            comment.is_post_writer = originalWriterId != null && Number(comment.writer_profile_id) === Number(originalWriterId);
+            delete comment.writer_profile_id;
+        }
 
         //  응답 반환
         return res.json({
@@ -278,6 +286,9 @@ router.get("/:comment_id", async (req, res) => {
             .select(
                 "comment_num AS comment_id",
                 "p.user_id as user_id",
+                "profile.id as writer_profile_id",
+                "p.type",
+                "p.post_num",
                 "subject",
                 "like",
                 "quote_num AS quotes",
@@ -304,6 +315,12 @@ router.get("/:comment_id", async (req, res) => {
                 message: "해당 댓글이 존재하지 않습니다."
             });
         }
+
+        const originalWriterId = await getOriginalPostWriterId(comment.type, comment.post_num);
+        comment.is_post_writer = originalWriterId != null && Number(comment.writer_profile_id) === Number(originalWriterId);
+        delete comment.writer_profile_id;
+        delete comment.type;
+        delete comment.post_num;
 
         return res.json({
             success: true,
@@ -389,6 +406,7 @@ router.post("/list", async (req, res) => {
             .select(
                 "c.comment_num AS comment_id",
                 "c.user_id",
+                "profile.id as writer_profile_id",
                 "c.subject",
                 "c.like",
                 "c.quote_num AS quotes",
@@ -412,6 +430,13 @@ router.post("/list", async (req, res) => {
             .orderBy("c.timestamp", "desc")
             .limit(10)
             .offset(page * 10);
+
+        // 본인이 작성한 댓글들이라 글마다 원본 글이 다를 수 있어, 각 댓글마다 원본 작성자를 조회
+        await Promise.all(comments.map(async (comment) => {
+            const originalWriterId = await getOriginalPostWriterId(comment.type, comment.post_num);
+            comment.is_post_writer = originalWriterId != null && Number(comment.writer_profile_id) === Number(originalWriterId);
+            delete comment.writer_profile_id;
+        }));
 
         res.json(comments);
     } catch (err) {
