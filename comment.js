@@ -341,6 +341,154 @@ router.get("/:comment_id", async (req, res) => {
     }
 });
 
+// 댓글 수정 (작성자 본인만 가능)
+// - 게시된 댓글(draft=0): subject/사진만 수정 가능 (투표/인용은 잠금)
+// - 이어서 게시하기 댓글(draft=1): 모든 필드 수정 가능 + draft=0 전송 시 게시로 전환
+router.patch("/:comment_id", upload.array("files", 6), async (req, res) => {
+    const comment_id = parseInt(req.params.comment_id);
+    if (isNaN(comment_id)) {
+        return res.status(400).json({ success: false, message: "유효하지 않은 comment_id입니다." });
+    }
+
+    const our_id = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return;
+    if (!our_id) {
+        return res.status(401).json({ success: false, message: "로그인이 필요합니다." });
+    }
+
+    const trx = await knex.transaction();
+    try {
+        const comment = await trx("comment").where("comment_num", comment_id).first();
+        if (!comment) {
+            await trx.rollback();
+            return res.status(404).json({ success: false, message: "댓글을 찾을 수 없습니다." });
+        }
+
+        const writer_id = await user_id_to_id(comment.user_id);
+        if (Number(our_id) !== Number(writer_id)) {
+            await trx.rollback();
+            return res.status(403).json({ success: false, message: "수정 권한이 없습니다.", code: "4101" });
+        }
+
+        const updateFields = {};
+
+        if (typeof req.body.subject !== "undefined") {
+            if (!req.body.subject) {
+                await trx.rollback();
+                return res.status(400).json({ success: false, message: "본문은 비워둘 수 없습니다." });
+            }
+            updateFields.subject = req.body.subject;
+        }
+
+        // 사진: 새 파일이 첨부되면 기존 사진을 교체, remove_photo=true면 기존 사진만 삭제,
+        // 둘 다 아니면 기존 사진 유지
+        const wantsRemovePhoto = ["true", "1"].includes(String(req.body.remove_photo));
+        if (req.files && req.files.length > 0) {
+            const filenames = await Promise.all(req.files.map(f => regist_file(f)));
+            updateFields.photo = filenames[0] ?? null;
+            for (let i = 1; i <= 5; i++) {
+                updateFields[`photo_${i}`] = filenames[i] ?? null;
+            }
+        } else if (wantsRemovePhoto) {
+            updateFields.photo = null;
+            for (let i = 1; i <= 5; i++) {
+                updateFields[`photo_${i}`] = null;
+            }
+        }
+
+        const isDraft = comment.draft == 1;
+        const wantsPublish = req.body.draft === "0" || req.body.draft === 0 || req.body.draft === false;
+
+        if (!isDraft) {
+            // 이미 게시된 댓글: 투표/인용 변경은 허용하지 않음
+            if (typeof req.body.vote !== "undefined" || typeof req.body.quote_num !== "undefined") {
+                await trx.rollback();
+                return res.status(400).json({ success: false, message: "게시된 댓글의 투표/인용은 수정할 수 없습니다." });
+            }
+        } else {
+            // 이어서 게시하기 댓글: 인용 변경 (draft 상태이므로 quote_num은 아직 반영 전)
+            if (typeof req.body.quote_num !== "undefined") {
+                if (req.body.quote_num) {
+                    try {
+                        const { quote, quote_type } = await regist_quote(trx, req);
+                        updateFields.quote = quote;
+                        updateFields.quote_type = quote_type;
+                    } catch (err) {
+                        await trx.rollback();
+                        console.error("인용 과정에서 문제가 발생했습니다");
+                        return res.status(500).json({ success: false, message: "인용 과정에서 문제가 발생했습니다." });
+                    }
+                } else {
+                    updateFields.quote = null;
+                    updateFields.quote_type = null;
+                }
+            }
+
+            // 이어서 게시하기 댓글: 투표 변경 (미게시 상태라 투표자가 없어 교체해도 안전)
+            if (typeof req.body.vote !== "undefined") {
+                if (comment.vote) {
+                    await trx("vote_count").where({ vote_num: comment.vote }).delete();
+                    await trx("vote").where({ vote_num: comment.vote }).delete();
+                    updateFields.vote = null;
+                }
+                if (req.body.vote) {
+                    try {
+                        await regist_vote(trx, { vote: req.body.vote, post_type: 2, post_num: comment_id, table: "comment" });
+                    } catch (err) {
+                        await trx.rollback();
+                        const status = err.httpcode || 500;
+                        const message = err.message || "투표 등록 중 오류가 발생했습니다.";
+                        console.error(err);
+                        return res.status(status).json({ success: false, message });
+                    }
+                }
+            }
+
+            if (wantsPublish) {
+                updateFields.draft = 0;
+
+                // 이어서 게시하기 작성 시점엔 댓글 수에 반영하지 않았으므로, 게시 전환 시점에 반영
+                const targetTable = comment.type === 0 ? "talk" : (comment.type === 1 ? "think" : "comment");
+                const postColumn = comment.type === 0 ? "talk_num" : (comment.type === 1 ? "think_num" : "comment_num");
+                await trx(targetTable).where(postColumn, comment.post_num).increment("comment", 1);
+
+                // 이번 요청에서 새로 등록한 인용이 아니라, 이어서 게시하기 작성 시점부터 갖고 있던
+                // 인용을 지금 게시하는 경우 -> 게시 시점에 quote_num 반영
+                const quoteIsFresh = typeof req.body.quote_num !== "undefined";
+                const finalQuote = quoteIsFresh ? updateFields.quote : comment.quote;
+                const finalQuoteType = quoteIsFresh ? updateFields.quote_type : comment.quote_type;
+                if (!quoteIsFresh && finalQuote) {
+                    const quote_table = finalQuoteType == 0 ? "talk" : (finalQuoteType == 1 ? "think" : "comment");
+                    const quote_col = `${quote_table}_num`;
+                    const target = await trx(quote_table).select("quote_num").where(quote_col, finalQuote).first();
+                    if (target) {
+                        await trx(quote_table).update({ quote_num: target.quote_num + 1 }).where(quote_col, finalQuote);
+                    }
+                }
+            }
+        }
+
+        if (Object.keys(updateFields).length > 0) {
+            await trx("comment").where("comment_num", comment_id).update(updateFields);
+        }
+
+        await trx.commit();
+
+        const updated = await knex("comment").where("comment_num", comment_id).first();
+        return res.json({
+            success: true,
+            message: "댓글이 수정되었습니다.",
+            comment: updated
+        });
+    } catch (err) {
+        await trx.rollback();
+        console.error(err);
+        const status = err.httpcode || 500;
+        const message = err.message && err.httpcode ? err.message : "서버 오류가 발생했습니다.";
+        return res.status(status).json({ success: false, message });
+    }
+});
+
 router.delete("/:comment_id", async (req, res) => {
     const id = await define_id(req.headers.authorization, res);
     const comment_data = await knex("comment").select("user_id", "type", "post_num", "draft").where("comment_num", req.params.comment_id).first();

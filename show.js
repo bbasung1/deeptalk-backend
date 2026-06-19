@@ -122,6 +122,7 @@ router.get("/comment/:comment_id", async (req, res) => {
     }
 
     const content = await knex("comment as p").leftJoin("profile", "p.user_id", "profile.user_id").select("p.*", "p.comment_num AS comment_id", "profile.nickname", "profile.image", "profile.id as writer_profile_id").where("p.comment_num", req.params.comment_id).first();
+
     if (content) {
         if (requester_id) {
             const blocked = await knex("block_list")
