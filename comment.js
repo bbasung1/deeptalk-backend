@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote, add_nickname, getBlockedIds, extractMentionedIds } = require('./general.js');
+const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote, add_nickname, getBlockedIds, extractMentionedIds, getOriginalPostWriterId } = require('./general.js');
 const { sendReactionNotification, sendMentionNotification } = require('./fcm.js');
 const multer = require("multer");
 const upload = multer();
@@ -23,6 +23,7 @@ router.post("/", upload.array("files", 6), async (req, res) => {
     const post_num = parseInt(req.body.post_num);
     const { subject } = req.body;
     const our_id = await define_id(req.headers.authorization, res);
+    const draft = req.body.draft ?? 0;
     console.log(req.body);
     console.log(our_id);
     console.log(type);
@@ -94,8 +95,9 @@ router.post("/", upload.array("files", 6), async (req, res) => {
                 return res.status(500).json({ msg: "인용 과정에서 문제가 발생했습니다." })
             }
         }
-
-        await trx(targetTable).where(postColumn, post_num).increment("comment", 1);
+        if (draft === 0) {
+            await trx(targetTable).where(postColumn, post_num).increment("comment", 1);
+        }
         const [comment_num] = await trx("comment").insert({
             type,
             post_num,
@@ -104,7 +106,8 @@ router.post("/", upload.array("files", 6), async (req, res) => {
             reported: 0,
             ...photoFields,
             quote,
-            quote_type
+            quote_type,
+            draft
         });
         if (req.body.vote) {
             try {
@@ -120,7 +123,8 @@ router.post("/", upload.array("files", 6), async (req, res) => {
         await trx.commit();
         res.status(201).json({
             success: true,
-            message: "댓글이 등록되었습니다."
+            message: "댓글이 등록되었습니다.",
+            comment_num
         });
 
         // 게시물 작성자에게 반응 알림 발송 (응답 블로킹 방지를 위해 await 생략, talk/think에만 해당)
@@ -209,6 +213,7 @@ router.get("/", async (req, res) => {
             .select(
                 "comment_num AS comment_id",
                 "p.user_id as user_id",
+                "profile.id as writer_profile_id",
                 "subject",
                 "like",
                 "quote_num AS quotes",
@@ -223,6 +228,7 @@ router.get("/", async (req, res) => {
                 "photo_4",
                 "photo_5",
                 "vote",
+                "draft",
                 knex.raw("(`like` * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity"),
                 knex.raw("(SELECT COUNT(*) FROM comment AS r WHERE r.type = 2 AND r.post_num = p.comment_num) AS reply_count"),
                 ...islikeandbookmark(id, "comment", 2) // 가상의 Column
@@ -241,6 +247,13 @@ router.get("/", async (req, res) => {
 
         //  Knex 쿼리를 실제로 실행해서 결과를 가져오는 코드
         const comments = await commentQuery;
+
+        // 이 목록은 전부 같은 글(post_num)에 달린 댓글이므로, 원본 글 작성자는 한 번만 조회
+        const originalWriterId = await getOriginalPostWriterId(type, post_num);
+        for (const comment of comments) {
+            comment.is_post_writer = originalWriterId != null && Number(comment.writer_profile_id) === Number(originalWriterId);
+            delete comment.writer_profile_id;
+        }
 
         //  응답 반환
         return res.json({
@@ -278,10 +291,14 @@ router.get("/:comment_id", async (req, res) => {
             .select(
                 "comment_num AS comment_id",
                 "p.user_id as user_id",
+                "profile.id as writer_profile_id",
+                "p.type",
+                "p.post_num",
                 "subject",
                 "like",
                 "quote_num AS quotes",
                 "bookmarks",
+                "draft",
                 "timestamp",
                 "profile.nickname",
                 "profile.image as profile_image",
@@ -305,6 +322,12 @@ router.get("/:comment_id", async (req, res) => {
             });
         }
 
+        const originalWriterId = await getOriginalPostWriterId(comment.type, comment.post_num);
+        comment.is_post_writer = originalWriterId != null && Number(comment.writer_profile_id) === Number(originalWriterId);
+        delete comment.writer_profile_id;
+        delete comment.type;
+        delete comment.post_num;
+
         return res.json({
             success: true,
             comment
@@ -318,9 +341,157 @@ router.get("/:comment_id", async (req, res) => {
     }
 });
 
+// 댓글 수정 (작성자 본인만 가능)
+// - 게시된 댓글(draft=0): subject/사진만 수정 가능 (투표/인용은 잠금)
+// - 이어서 게시하기 댓글(draft=1): 모든 필드 수정 가능 + draft=0 전송 시 게시로 전환
+router.patch("/:comment_id", upload.array("files", 6), async (req, res) => {
+    const comment_id = parseInt(req.params.comment_id);
+    if (isNaN(comment_id)) {
+        return res.status(400).json({ success: false, message: "유효하지 않은 comment_id입니다." });
+    }
+
+    const our_id = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return;
+    if (!our_id) {
+        return res.status(401).json({ success: false, message: "로그인이 필요합니다." });
+    }
+
+    const trx = await knex.transaction();
+    try {
+        const comment = await trx("comment").where("comment_num", comment_id).first();
+        if (!comment) {
+            await trx.rollback();
+            return res.status(404).json({ success: false, message: "댓글을 찾을 수 없습니다." });
+        }
+
+        const writer_id = await user_id_to_id(comment.user_id);
+        if (Number(our_id) !== Number(writer_id)) {
+            await trx.rollback();
+            return res.status(403).json({ success: false, message: "수정 권한이 없습니다.", code: "4101" });
+        }
+
+        const updateFields = {};
+
+        if (typeof req.body.subject !== "undefined") {
+            if (!req.body.subject) {
+                await trx.rollback();
+                return res.status(400).json({ success: false, message: "본문은 비워둘 수 없습니다." });
+            }
+            updateFields.subject = req.body.subject;
+        }
+
+        // 사진: 새 파일이 첨부되면 기존 사진을 교체, remove_photo=true면 기존 사진만 삭제,
+        // 둘 다 아니면 기존 사진 유지
+        const wantsRemovePhoto = ["true", "1"].includes(String(req.body.remove_photo));
+        if (req.files && req.files.length > 0) {
+            const filenames = await Promise.all(req.files.map(f => regist_file(f)));
+            updateFields.photo = filenames[0] ?? null;
+            for (let i = 1; i <= 5; i++) {
+                updateFields[`photo_${i}`] = filenames[i] ?? null;
+            }
+        } else if (wantsRemovePhoto) {
+            updateFields.photo = null;
+            for (let i = 1; i <= 5; i++) {
+                updateFields[`photo_${i}`] = null;
+            }
+        }
+
+        const isDraft = comment.draft == 1;
+        const wantsPublish = req.body.draft === "0" || req.body.draft === 0 || req.body.draft === false;
+
+        if (!isDraft) {
+            // 이미 게시된 댓글: 투표/인용 변경은 허용하지 않음
+            if (typeof req.body.vote !== "undefined" || typeof req.body.quote_num !== "undefined") {
+                await trx.rollback();
+                return res.status(400).json({ success: false, message: "게시된 댓글의 투표/인용은 수정할 수 없습니다." });
+            }
+        } else {
+            // 이어서 게시하기 댓글: 인용 변경 (draft 상태이므로 quote_num은 아직 반영 전)
+            if (typeof req.body.quote_num !== "undefined") {
+                if (req.body.quote_num) {
+                    try {
+                        const { quote, quote_type } = await regist_quote(trx, req);
+                        updateFields.quote = quote;
+                        updateFields.quote_type = quote_type;
+                    } catch (err) {
+                        await trx.rollback();
+                        console.error("인용 과정에서 문제가 발생했습니다");
+                        return res.status(500).json({ success: false, message: "인용 과정에서 문제가 발생했습니다." });
+                    }
+                } else {
+                    updateFields.quote = null;
+                    updateFields.quote_type = null;
+                }
+            }
+
+            // 이어서 게시하기 댓글: 투표 변경 (미게시 상태라 투표자가 없어 교체해도 안전)
+            if (typeof req.body.vote !== "undefined") {
+                if (comment.vote) {
+                    await trx("vote_count").where({ vote_num: comment.vote }).delete();
+                    await trx("vote").where({ vote_num: comment.vote }).delete();
+                    updateFields.vote = null;
+                }
+                if (req.body.vote) {
+                    try {
+                        await regist_vote(trx, { vote: req.body.vote, post_type: 2, post_num: comment_id, table: "comment" });
+                    } catch (err) {
+                        await trx.rollback();
+                        const status = err.httpcode || 500;
+                        const message = err.message || "투표 등록 중 오류가 발생했습니다.";
+                        console.error(err);
+                        return res.status(status).json({ success: false, message });
+                    }
+                }
+            }
+
+            if (wantsPublish) {
+                updateFields.draft = 0;
+
+                // 이어서 게시하기 작성 시점엔 댓글 수에 반영하지 않았으므로, 게시 전환 시점에 반영
+                const targetTable = comment.type === 0 ? "talk" : (comment.type === 1 ? "think" : "comment");
+                const postColumn = comment.type === 0 ? "talk_num" : (comment.type === 1 ? "think_num" : "comment_num");
+                await trx(targetTable).where(postColumn, comment.post_num).increment("comment", 1);
+
+                // 이번 요청에서 새로 등록한 인용이 아니라, 이어서 게시하기 작성 시점부터 갖고 있던
+                // 인용을 지금 게시하는 경우 -> 게시 시점에 quote_num 반영
+                const quoteIsFresh = typeof req.body.quote_num !== "undefined";
+                const finalQuote = quoteIsFresh ? updateFields.quote : comment.quote;
+                const finalQuoteType = quoteIsFresh ? updateFields.quote_type : comment.quote_type;
+                if (!quoteIsFresh && finalQuote) {
+                    const quote_table = finalQuoteType == 0 ? "talk" : (finalQuoteType == 1 ? "think" : "comment");
+                    const quote_col = `${quote_table}_num`;
+                    const target = await trx(quote_table).select("quote_num").where(quote_col, finalQuote).first();
+                    if (target) {
+                        await trx(quote_table).update({ quote_num: target.quote_num + 1 }).where(quote_col, finalQuote);
+                    }
+                }
+            }
+        }
+
+        if (Object.keys(updateFields).length > 0) {
+            await trx("comment").where("comment_num", comment_id).update(updateFields);
+        }
+
+        await trx.commit();
+
+        const updated = await knex("comment").where("comment_num", comment_id).first();
+        return res.json({
+            success: true,
+            message: "댓글이 수정되었습니다.",
+            comment: updated
+        });
+    } catch (err) {
+        await trx.rollback();
+        console.error(err);
+        const status = err.httpcode || 500;
+        const message = err.message && err.httpcode ? err.message : "서버 오류가 발생했습니다.";
+        return res.status(status).json({ success: false, message });
+    }
+});
+
 router.delete("/:comment_id", async (req, res) => {
     const id = await define_id(req.headers.authorization, res);
-    const comment_data = await knex("comment").select("user_id", "type", "post_num").where("comment_num", req.params.comment_id).first();
+    const comment_data = await knex("comment").select("user_id", "type", "post_num", "draft").where("comment_num", req.params.comment_id).first();
     const comment_writer_id = await user_id_to_id(comment_data.user_id);
     if (id != comment_writer_id) {
         console.log(id);
@@ -331,7 +502,9 @@ router.delete("/:comment_id", async (req, res) => {
         const TargetTable = comment_data.type === 0 ? "talk" : "think";
         const postColumn = comment_data.type === 0 ? "talk_num" : "think_num";
         await knex("comment").where("comment_num", req.params.comment_id).delete();
-        await knex(TargetTable).where(postColumn, comment_data.post_num).decrement("comment", 1);
+        if (comment_data.draft === 0) {
+            await knex(TargetTable).where(postColumn, comment_data.post_num).decrement("comment", 1);
+        }
         return res.json({ "success": 1 })
     } catch {
         return res.status(500).json({ "success": 0, "msg": "삭제 과정에서 오류가 발생했습니다" });
@@ -367,28 +540,29 @@ router.post("/list", async (req, res) => {
                                     this.select("talk_num").from("talk").whereIn("writer_id", blockedIds);
                                 });
                         })
-                        // think에 달린 댓글 중 차단 유저 게시물 제외
-                        .whereNot(function () {
-                            this.where("c.type", 1)
-                                .whereIn("c.post_num", function () {
-                                    this.select("think_num").from("think").whereIn("writer_id", blockedIds);
-                                });
-                        })
-                        // 댓글에 달린 댓글 중 차단 유저 댓글 제외
-                        .whereNot(function () {
-                            this.where("c.type", 2)
-                                .whereIn("c.post_num", function () {
-                                    this.select("comment_num").from("comment as parent")
-                                        .join("profile as pp", "parent.user_id", "pp.user_id")
-                                        .whereIn("pp.id", blockedIds);
-                                });
-                        });
+                            // think에 달린 댓글 중 차단 유저 게시물 제외
+                            .whereNot(function () {
+                                this.where("c.type", 1)
+                                    .whereIn("c.post_num", function () {
+                                        this.select("think_num").from("think").whereIn("writer_id", blockedIds);
+                                    });
+                            })
+                            // 댓글에 달린 댓글 중 차단 유저 댓글 제외
+                            .whereNot(function () {
+                                this.where("c.type", 2)
+                                    .whereIn("c.post_num", function () {
+                                        this.select("comment_num").from("comment as parent")
+                                            .join("profile as pp", "parent.user_id", "pp.user_id")
+                                            .whereIn("pp.id", blockedIds);
+                                    });
+                            });
                     });
                 }
             })
             .select(
                 "c.comment_num AS comment_id",
                 "c.user_id",
+                "profile.id as writer_profile_id",
                 "c.subject",
                 "c.like",
                 "c.quote_num AS quotes",
@@ -412,6 +586,13 @@ router.post("/list", async (req, res) => {
             .orderBy("c.timestamp", "desc")
             .limit(10)
             .offset(page * 10);
+
+        // 본인이 작성한 댓글들이라 글마다 원본 글이 다를 수 있어, 각 댓글마다 원본 작성자를 조회
+        await Promise.all(comments.map(async (comment) => {
+            const originalWriterId = await getOriginalPostWriterId(comment.type, comment.post_num);
+            comment.is_post_writer = originalWriterId != null && Number(comment.writer_profile_id) === Number(originalWriterId);
+            delete comment.writer_profile_id;
+        }));
 
         res.json(comments);
     } catch (err) {
