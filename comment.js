@@ -343,7 +343,7 @@ router.get("/:comment_id", async (req, res) => {
 
 // 댓글 수정 (작성자 본인만 가능)
 // - 게시된 댓글(draft=0): subject/사진만 수정 가능 (투표/인용은 잠금)
-// - 임시저장 댓글(draft=1): 모든 필드 수정 가능 + draft=0 전송 시 게시로 전환
+// - 이어서 게시하기 댓글(draft=1): 모든 필드 수정 가능 + draft=0 전송 시 게시로 전환
 router.patch("/:comment_id", upload.array("files", 6), async (req, res) => {
     const comment_id = parseInt(req.params.comment_id);
     if (isNaN(comment_id)) {
@@ -406,7 +406,7 @@ router.patch("/:comment_id", upload.array("files", 6), async (req, res) => {
                 return res.status(400).json({ success: false, message: "게시된 댓글의 투표/인용은 수정할 수 없습니다." });
             }
         } else {
-            // 임시저장 댓글: 인용 변경 (draft 상태이므로 quote_num은 아직 반영 전)
+            // 이어서 게시하기 댓글: 인용 변경 (draft 상태이므로 quote_num은 아직 반영 전)
             if (typeof req.body.quote_num !== "undefined") {
                 if (req.body.quote_num) {
                     try {
@@ -424,7 +424,7 @@ router.patch("/:comment_id", upload.array("files", 6), async (req, res) => {
                 }
             }
 
-            // 임시저장 댓글: 투표 변경 (미게시 상태라 투표자가 없어 교체해도 안전)
+            // 이어서 게시하기 댓글: 투표 변경 (미게시 상태라 투표자가 없어 교체해도 안전)
             if (typeof req.body.vote !== "undefined") {
                 if (comment.vote) {
                     await trx("vote_count").where({ vote_num: comment.vote }).delete();
@@ -447,12 +447,12 @@ router.patch("/:comment_id", upload.array("files", 6), async (req, res) => {
             if (wantsPublish) {
                 updateFields.draft = 0;
 
-                // 임시저장 시점엔 댓글 수에 반영하지 않았으므로, 게시 전환 시점에 반영
+                // 이어서 게시하기 작성 시점엔 댓글 수에 반영하지 않았으므로, 게시 전환 시점에 반영
                 const targetTable = comment.type === 0 ? "talk" : (comment.type === 1 ? "think" : "comment");
                 const postColumn = comment.type === 0 ? "talk_num" : (comment.type === 1 ? "think_num" : "comment_num");
                 await trx(targetTable).where(postColumn, comment.post_num).increment("comment", 1);
 
-                // 이번 요청에서 새로 등록한 인용이 아니라, 임시저장 시점부터 갖고 있던
+                // 이번 요청에서 새로 등록한 인용이 아니라, 이어서 게시하기 작성 시점부터 갖고 있던
                 // 인용을 지금 게시하는 경우 -> 게시 시점에 quote_num 반영
                 const quoteIsFresh = typeof req.body.quote_num !== "undefined";
                 const finalQuote = quoteIsFresh ? updateFields.quote : comment.quote;
