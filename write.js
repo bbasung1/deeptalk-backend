@@ -165,12 +165,19 @@ router.patch("/:mode/:id", upload.array("files", 6), async (req, res) => {
             updateFields.header = req.body.header || null;
         }
 
-        // 사진: 새 파일이 첨부된 경우에만 기존 사진을 교체 (미첨부 시 기존 사진 유지)
+        // 사진: 새 파일이 첨부되면 기존 사진을 교체, remove_photo=true면 기존 사진만 삭제,
+        // 둘 다 아니면 기존 사진 유지
+        const wantsRemovePhoto = ["true", "1"].includes(String(req.body.remove_photo));
         if (req.files && req.files.length > 0) {
             const filenames = await Promise.all(req.files.map(f => regist_file(f)));
             updateFields.photo = filenames[0] ?? null;
             for (let i = 1; i <= 5; i++) {
                 updateFields[`photo_${i}`] = filenames[i] ?? null;
+            }
+        } else if (wantsRemovePhoto) {
+            updateFields.photo = null;
+            for (let i = 1; i <= 5; i++) {
+                updateFields[`photo_${i}`] = null;
             }
         }
 
