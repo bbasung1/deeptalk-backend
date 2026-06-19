@@ -121,7 +121,13 @@ router.get("/comment/:comment_id", async (req, res) => {
         if (res.headersSent) return;
     }
 
-    const content = await knex("comment as p").leftJoin("profile", "p.user_id", "profile.user_id").select("p.*", "p.comment_num AS comment_id", "profile.nickname", "profile.image", "profile.id as writer_profile_id").where("p.comment_num", req.params.comment_id).first();
+    let content = await knex("comment as p").leftJoin("profile", "p.user_id", "profile.user_id").select("p.*", "p.comment_num AS comment_id", "profile.nickname", "profile.image", "profile.id as writer_profile_id").where("p.comment_num", req.params.comment_id).first();
+
+    // 임시저장(draft=1) 댓글은 작성자 본인에게만 노출 (존재 여부 노출 방지 위해 미존재로 처리)
+    if (content && content.draft === 1 && (requester_id == null || Number(requester_id) !== Number(content.writer_profile_id))) {
+        content = null;
+    }
+
     if (content) {
         if (requester_id) {
             const blocked = await knex("block_list")
