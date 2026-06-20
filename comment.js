@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, user_id_to_id, islikeandbookmark, regist_file, regist_quote, regist_vote, add_nickname, getBlockedIds, extractMentionedIds, getOriginalPostWriterId } = require('./general.js');
+const { define_id, user_id_to_id, islikeandbookmark, iscommentandquote, regist_file, regist_quote, regist_vote, add_nickname, getBlockedIds, extractMentionedIds, getOriginalPostWriterId } = require('./general.js');
 const { sendReactionNotification, sendMentionNotification } = require('./fcm.js');
 const multer = require("multer");
 const upload = multer();
@@ -231,7 +231,8 @@ router.get("/", async (req, res) => {
                 "draft",
                 knex.raw("(`like` * 2 + quote_num * 3.5 + bookmarks * 2) AS popularity"),
                 knex.raw("(SELECT COUNT(*) FROM comment AS r WHERE r.type = 2 AND r.post_num = p.comment_num) AS reply_count"),
-                ...islikeandbookmark(id, "comment", 2) // 가상의 Column
+                ...islikeandbookmark(id, "comment", 2), // 가상의 Column
+                ...iscommentandquote(id, "comment", 2, "is_reply", "p")
             )
             .where({ type, post_num });
 
@@ -310,7 +311,8 @@ router.get("/:comment_id", async (req, res) => {
                 "photo_5",
                 "vote",
                 knex.raw("(SELECT COUNT(*) FROM comment AS r WHERE r.type = 2 AND r.post_num = p.comment_num) AS reply_count"),
-                ...islikeandbookmark(id, "comment", 2)
+                ...islikeandbookmark(id, "comment", 2),
+                ...iscommentandquote(id, "comment", 2, "is_reply", "p")
             )
             .where("comment_num", comment_id)
             .first();
@@ -581,7 +583,8 @@ router.post("/list", async (req, res) => {
                 "profile.nickname",
                 "profile.image as profile_image",
                 knex.raw("(SELECT COUNT(*) FROM comment AS r WHERE r.type = 2 AND r.post_num = c.comment_num) AS reply_count"),
-                ...islikeandbookmark(requester_id, "comment", 2)
+                ...islikeandbookmark(requester_id, "comment", 2),
+                ...iscommentandquote(requester_id, "comment", 2, "is_reply", "c")
             )
             .orderBy("c.timestamp", "desc")
             .limit(10)

@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, add_nickname, user_id_to_id, islikeandbookmark } = require("./general.js");
+const { define_id, add_nickname, user_id_to_id, islikeandbookmark, iscommentandquote } = require("./general.js");
 const { buildPostResponse } = require("./postSerializer.js");
 
 router.use(express.json());
@@ -95,7 +95,8 @@ async function resort_post(type, ourid, page) {
       'p.*',
       "profile.nickname",
       "profile.image as profile_image",
-      ...islikeandbookmark(ourid, type, type_code)
+      ...islikeandbookmark(ourid, type, type_code),
+      ...iscommentandquote(ourid, type, type_code)
     )
     // .orderBy(knex.raw(rawFinalScoreSQL), 'desc');
     .orderByRaw(`${rawFreshnessScoreSQL} DESC`)

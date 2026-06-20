@@ -7,7 +7,7 @@ router.use(express.urlencoded({ extended: true }));
 
 const { stream } = require("./log.js");
 const morgan = require("morgan");
-const { user_id_to_id, islikeandbookmark, define_id, getBlockedIds } = require("./general.js");
+const { user_id_to_id, islikeandbookmark, iscommentandquote, define_id, getBlockedIds } = require("./general.js");
 const { buildPostResponse } = require("./postSerializer.js");
 router.use(
     morgan(
@@ -35,7 +35,7 @@ router.post("/", async (req, res) => {
                 .where('writer_id', target_id)
                 .whereNotIn('writer_id', blockedIds)
                 .leftJoin("profile", "talk.writer_id", "profile.id")
-                .select('talk.*', ...islikeandbookmark(requester_id, "talk", 0), "profile.nickname", "profile.image as profile_image")
+                .select('talk.*', ...islikeandbookmark(requester_id, "talk", 0), ...iscommentandquote(requester_id, "talk", 0), "profile.nickname", "profile.image as profile_image")
                 .limit(10).offset(page * 10);
             return res.json(await buildPostResponse(talk, requester_id));
         }
@@ -44,7 +44,7 @@ router.post("/", async (req, res) => {
                 .where('writer_id', target_id)
                 .whereNotIn('writer_id', blockedIds)
                 .leftJoin("profile", "think.writer_id", "profile.id")
-                .select('think.*', ...islikeandbookmark(requester_id, "think", 1), "profile.nickname", "profile.image as profile_image")
+                .select('think.*', ...islikeandbookmark(requester_id, "think", 1), ...iscommentandquote(requester_id, "think", 1), "profile.nickname", "profile.image as profile_image")
                 .limit(10).offset(page * 10);
             return res.json(await buildPostResponse(think, requester_id));
         }
@@ -53,9 +53,16 @@ router.post("/", async (req, res) => {
                 .where('comment.user_id', user_id)
                 .leftJoin("profile", "comment.user_id", "profile.user_id")
                 .whereNotIn('profile.id', blockedIds)
-                .select("comment.*", ...islikeandbookmark(requester_id, "comment", 2), "profile.nickname", "profile.image as profile_image")
+                .select("comment.*", ...islikeandbookmark(requester_id, "comment", 2), ...iscommentandquote(requester_id, "comment", 2, "is_reply", "comment"), "profile.nickname", "profile.image as profile_image")
                 .limit(10).offset(page * 10);
-            return res.json(comments);
+            const serializedComments = comments.map(c => ({
+                ...c,
+                is_like: Boolean(c.is_like),
+                is_bookmark: Boolean(c.is_bookmark),
+                is_reply: Boolean(c.is_reply),
+                is_quote: Boolean(c.is_quote),
+            }));
+            return res.json(serializedComments);
         }
         return res.status(400).json({ msg: "type은 talk, think, comment 중 하나여야 합니다." });
     } catch (err) {
@@ -119,7 +126,8 @@ router.post("/quote_list", async (req, res) => {
                 "p.photo_3", "p.photo_4", "p.photo_5", "p.vote", "p.draft",
                 "p.notify_mute", "p.timestamp",
                 "profile.nickname", "profile.image as profile_image",
-                ...islikeandbookmark(requester_id, "talk", 0)
+                ...islikeandbookmark(requester_id, "talk", 0),
+                ...iscommentandquote(requester_id, "talk", 0)
             ),
         knex("think as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
@@ -133,7 +141,8 @@ router.post("/quote_list", async (req, res) => {
                 "p.photo_3", "p.photo_4", "p.photo_5", "p.vote", "p.draft",
                 "p.notify_mute", "p.timestamp",
                 "profile.nickname", "profile.image as profile_image",
-                ...islikeandbookmark(requester_id, "think", 1)
+                ...islikeandbookmark(requester_id, "think", 1),
+                ...iscommentandquote(requester_id, "think", 1)
             ),
     ]);
 
