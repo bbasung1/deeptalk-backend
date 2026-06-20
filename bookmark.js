@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, islikeandbookmark } = require("./general.js");
+const { define_id, islikeandbookmark, iscommentandquote } = require("./general.js");
 const { buildPostResponse } = require("./postSerializer.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -66,7 +66,7 @@ router.get("/list", async (req, res) => {
     const num_name = pt_type_name + "_num"
     const list = await knex(pt_type_name)
         .leftJoin("profile", `${pt_type_name}.writer_id`, "profile.id")
-        .select(`${pt_type_name}.*`, ...islikeandbookmark(ourid, pt_type_name, pt_type_bool), "profile.nickname", "profile.image as profile_image")
+        .select(`${pt_type_name}.*`, ...islikeandbookmark(ourid, pt_type_name, pt_type_bool), ...iscommentandquote(ourid, pt_type_name, pt_type_bool), "profile.nickname", "profile.image as profile_image")
         .whereIn(num_name, function () {
             this.select("post_id").from("bookmark").where({ type: pt_type_bool, user_id: ourid });
         });

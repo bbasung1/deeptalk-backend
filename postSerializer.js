@@ -164,6 +164,8 @@ function serializePost(post) {
         // --- 내 활동 여부 ---
         is_like: Boolean(post.is_like),
         is_bookmark: Boolean(post.is_bookmark),
+        is_comment: Boolean(post.is_comment),
+        is_quote: Boolean(post.is_quote),
 
         // ★ 새 필드 추가 시 여기만 수정 ★
         vote: post.vote ?? null,

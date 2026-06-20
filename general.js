@@ -197,6 +197,51 @@ const islikeandbookmark = (id, type_name, type_code) => [
     )
 ];
 
+/**
+ * 내가 이 글(또는 댓글)에 댓글/대댓글을 작성했는지, 인용했는지를 EXISTS 서브쿼리로 반환합니다.
+ *
+ * - comment 테이블의 user_id 는 profile.user_id(외부 id) 를 저장하므로 profile 과 조인해서
+ *   내부 id(id 파라미터) 와 비교합니다. (post_like / bookmark 는 내부 id 를 직접 저장하므로 다름)
+ * - 인용은 talk / think / comment 어디서든 일어날 수 있으므로 세 테이블을 모두 확인합니다.
+ *
+ * @param {number}      id          - 현재 사용자의 내부 id (profile.id)
+ * @param {string}      type_name   - "talk" | "think" | "comment" → `${type_name}_num` 컬럼 기준으로 매칭
+ * @param {number}      type_code   - 대상 글의 타입 (0=talk, 1=think, 2=comment)
+ * @param {string}      [comment_alias="is_comment"] - 댓글 작성 여부 컬럼의 별칭.
+ *        talk/think 글에는 "is_comment"(댓글 작성 여부), comment(대댓글 대상)에는 "is_reply"(대댓글 작성 여부)로 사용합니다.
+ * @param {string|null} [outer_ref=null] - 바깥 쿼리에서 이 글(또는 댓글)의 번호 컬럼을 가리키는 테이블명/별칭.
+ *        talk/think 호출은 서브쿼리(f4~f7) 안에 talk_num/think_num 컬럼이 없어 그냥 "talk_num"/"think_num"이라고만
+ *        써도 자동으로 바깥 쿼리 컬럼을 찾아가므로 생략(null)해도 됩니다.
+ *        반면 type_name이 "comment"인 경우 서브쿼리 안에도 동일한 comment 테이블(f4/f7)이 있어서
+ *        그냥 "comment_num"이라고만 쓰면 서브쿼리 자기 자신의 컬럼으로 잘못 해석됩니다(항상 false로 깨짐).
+ *        이 경우 반드시 바깥 쿼리에서 실제 사용 중인 테이블명/별칭("p", "c" 등)을 outer_ref로 명시해야 합니다.
+ */
+const iscommentandquote = (id, type_name, type_code, comment_alias = "is_comment", outer_ref = null) => {
+    const outerCol = outer_ref ? `${outer_ref}.${type_name}_num` : `${type_name}_num`;
+    return [
+        knex.raw(
+            `EXISTS(
+                SELECT 1 FROM comment AS f4
+                INNER JOIN profile AS pf4 ON pf4.user_id = f4.user_id
+                WHERE pf4.id = ? AND f4.post_num = ${outerCol} AND f4.type = ?
+            ) AS ${comment_alias}`,
+            [id, type_code]
+        ),
+        knex.raw(
+            `(
+                EXISTS(SELECT 1 FROM talk AS f5 WHERE f5.writer_id = ? AND f5.quote = ${outerCol} AND f5.quote_type = ?)
+                OR EXISTS(SELECT 1 FROM think AS f6 WHERE f6.writer_id = ? AND f6.quote = ${outerCol} AND f6.quote_type = ?)
+                OR EXISTS(
+                    SELECT 1 FROM comment AS f7
+                    INNER JOIN profile AS pf7 ON pf7.user_id = f7.user_id
+                    WHERE pf7.id = ? AND f7.quote = ${outerCol} AND f7.quote_type = ?
+                )
+            ) AS is_quote`,
+            [id, type_code, id, type_code, id, type_code]
+        )
+    ];
+};
+
 async function decrement_quote_num(post_info, trx) {
     const type = post_info.quote_type == 0 ? "talk" : (post_info.quote_type == 1 ? "think" : "comment");
     const type_num = type + "_num";
@@ -340,6 +385,7 @@ module.exports = {
     id_to_user_id,
     user_id_to_id,
     islikeandbookmark,
+    iscommentandquote,
     decrement_quote_num,
     regist_file,
     regist_quote,

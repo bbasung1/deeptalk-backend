@@ -88,7 +88,7 @@ router.post("/", upload.array("files", 6), async (req, res) => {
             }
         }
         await trx.commit();
-        res.status(201).json({ success: true, message: "글이 성공적으로 등록되었습니다." });
+        res.status(201).json({ success: true, message: "글이 성공적으로 등록되었습니다.", id: post_num });
 
         // 팔로워에게 FCM 알림 발송 (응답 블로킹 방지를 위해 await 생략)
         const nickname = await add_nickname(writer_id);

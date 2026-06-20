@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { decrement_quote_num, define_id, islikeandbookmark } = require("./general.js");
+const { decrement_quote_num, define_id, islikeandbookmark, iscommentandquote } = require("./general.js");
 const { buildPostResponse } = require("./postSerializer.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -31,7 +31,7 @@ router.get("/:id", async (req, res) => {
                     .where('user_id', id);
             })
             .where("p.talk_num", req.params.id)
-            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(id, "talk", 0));
+            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(id, "talk", 0), ...iscommentandquote(id, "talk", 0));
         if (talk == undefined) {
             return res.json({ msg: "없거나 비공개인 포스트 입니다" })
         }

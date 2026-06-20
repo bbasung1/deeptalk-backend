@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { user_id_to_id, islikeandbookmark, define_id, getOriginalPostWriterId } = require("./general.js");
+const { user_id_to_id, islikeandbookmark, iscommentandquote, define_id, getOriginalPostWriterId } = require("./general.js");
 const { buildPostResponse } = require("./postSerializer.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -121,7 +121,17 @@ router.get("/comment/:comment_id", async (req, res) => {
         if (res.headersSent) return;
     }
 
-    const content = await knex("comment as p").leftJoin("profile", "p.user_id", "profile.user_id").select("p.*", "p.comment_num AS comment_id", "profile.nickname", "profile.image", "profile.id as writer_profile_id").where("p.comment_num", req.params.comment_id).first();
+    const content = await knex("comment as p")
+        .leftJoin("profile", "p.user_id", "profile.user_id")
+        .select(
+            "p.*",
+            "p.comment_num AS comment_id",
+            "profile.nickname",
+            "profile.image",
+            "profile.id as writer_profile_id",
+            ...iscommentandquote(requester_id, "comment", 2, "is_reply", "p")
+        )
+        .where("p.comment_num", req.params.comment_id).first();
 
     if (content) {
         if (requester_id) {
@@ -137,6 +147,8 @@ router.get("/comment/:comment_id", async (req, res) => {
         }
         const originalWriterId = await getOriginalPostWriterId(content.type, content.post_num);
         content.is_post_writer = originalWriterId != null && Number(content.writer_profile_id) === Number(originalWriterId);
+        content.is_reply = Boolean(content.is_reply);
+        content.is_quote = Boolean(content.is_quote);
         delete content.comment_num;
         delete content.writer_profile_id;
     }
@@ -157,23 +169,30 @@ router.get("/quotes/:type/:post_id", async (req, res) => {
         knex("talk as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where({ quote_type: type, quote: req.params.post_id, 'p.draft': 0 })
-            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "talk", 0))
+            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "talk", 0), ...iscommentandquote(userId, "talk", 0))
             .limit(10).offset(page * 10),
         knex("think as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where({ quote_type: type, quote: req.params.post_id, 'p.draft': 0 })
-            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "think", 1))
+            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "think", 1), ...iscommentandquote(userId, "think", 1))
             .limit(10).offset(page * 10),
         knex("comment as p")
             .leftJoin("profile", "p.user_id", "profile.user_id")
             .where({ quote_type: type, quote: req.params.post_id })
-            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "comment", 2))
+            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "comment", 2), ...iscommentandquote(userId, "comment", 2, "is_reply", "p"))
             .limit(10).offset(page * 10),
     ]);
 
     // comment는 게시물(talk/think)과 스키마가 달라 별도로 반환
     const posts = await buildPostResponse([...list1, ...list2], userId);
-    res.json({ posts, comments: list3 });
+    const comments = list3.map(c => ({
+        ...c,
+        is_like: Boolean(c.is_like),
+        is_bookmark: Boolean(c.is_bookmark),
+        is_reply: Boolean(c.is_reply),
+        is_quote: Boolean(c.is_quote),
+    }));
+    res.json({ posts, comments });
 });
 
 
