@@ -34,12 +34,12 @@ router.post("/", async (req, res) => {
     const reporter_id = ourid;
 
     // 2️⃣ 요청 body 검증
-    const { post_id, post_type, report_type, reason } = req.body;
-    if (!post_id || !post_type || !report_type) {
+    const { post_id, post_type, report_type, reason, category } = req.body;
+    if (!category || !report_type) {
       return res.status(400).json({ success: 0, msg: "필수 항목이 누락되었습니다." });
     }
 
-    if (!["think", "talk"].includes(post_type)) {
+    if (!["think", "talk", "comment"].includes(post_type)) {
       return res.status(400).json({ success: 0, msg: "유효하지 않은 post_type 값입니다." });
     }
 
@@ -47,11 +47,13 @@ router.post("/", async (req, res) => {
     let reportedUser;
     if (post_type === "think") {
       reportedUser = await knex("think").where("think_num", post_id).select("writer_id").first();
-    } else {
+    } else if (post_type == "talk") {
       reportedUser = await knex("talk").where("talk_num", post_id).select("writer_id").first();
+    } else if (post_type == "comment") {
+      reportedUser = await knex("comment").where("comment_num", post_id).select("writer_id").first();
     }
 
-    if (!reportedUser) {
+    if (!reportedUser && category == "report") {
       return res.status(404).json({ success: 0, msg: "해당 게시글을 찾을 수 없습니다." });
     }
 
@@ -74,6 +76,7 @@ router.post("/", async (req, res) => {
       post_type,
       report_type,
       reason,
+      category
     });
 
     return res.status(201).json({ success: 1, msg: "신고가 접수되었습니다." });
