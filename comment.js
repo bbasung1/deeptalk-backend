@@ -190,7 +190,7 @@ router.get("/", async (req, res) => {
         //  게시글 존재 여부 확인
         const post = await knex(targetTable)
             .where(postColumn, post_num)
-            .select(knex.raw("1"))
+            .select("comment")
             .first();
 
         if (!post) {
@@ -259,7 +259,7 @@ router.get("/", async (req, res) => {
         //  응답 반환
         return res.json({
             success: true,
-            comment_count: comments.length,
+            comment_count: post.comment,
             comments
         });
     } catch (err) {
@@ -310,6 +310,7 @@ router.get("/:comment_id", async (req, res) => {
                 "photo_4",
                 "photo_5",
                 "vote",
+                "comment",
                 knex.raw("(SELECT COUNT(*) FROM comment AS r WHERE r.type = 2 AND r.post_num = p.comment_num) AS reply_count"),
                 ...islikeandbookmark(id, "comment", 2),
                 ...iscommentandquote(id, "comment", 2, "is_reply", "p")

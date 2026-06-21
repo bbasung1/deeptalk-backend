@@ -209,15 +209,19 @@ const islikeandbookmark = (id, type_name, type_code) => [
  * @param {number}      type_code   - 대상 글의 타입 (0=talk, 1=think, 2=comment)
  * @param {string}      [comment_alias="is_comment"] - 댓글 작성 여부 컬럼의 별칭.
  *        talk/think 글에는 "is_comment"(댓글 작성 여부), comment(대댓글 대상)에는 "is_reply"(대댓글 작성 여부)로 사용합니다.
- * @param {string|null} [outer_ref=null] - 바깥 쿼리에서 이 글(또는 댓글)의 번호 컬럼을 가리키는 테이블명/별칭.
- *        talk/think 호출은 서브쿼리(f4~f7) 안에 talk_num/think_num 컬럼이 없어 그냥 "talk_num"/"think_num"이라고만
- *        써도 자동으로 바깥 쿼리 컬럼을 찾아가므로 생략(null)해도 됩니다.
- *        반면 type_name이 "comment"인 경우 서브쿼리 안에도 동일한 comment 테이블(f4/f7)이 있어서
- *        그냥 "comment_num"이라고만 쓰면 서브쿼리 자기 자신의 컬럼으로 잘못 해석됩니다(항상 false로 깨짐).
- *        이 경우 반드시 바깥 쿼리에서 실제 사용 중인 테이블명/별칭("p", "c" 등)을 outer_ref로 명시해야 합니다.
+ * @param {string} outer_ref - 바깥 쿼리에서 이 글(또는 댓글)이 조회되는 테이블명/별칭(예: "p", "c", 별칭이 없으면
+ *        실제 테이블명인 "talk"/"think"/"comment").
+ *        is_quote 서브쿼리는 talk/think/comment를 전부 f5/f6/f7로 다시 조회하므로, type_name이 무엇이든
+ *        바깥 쿼리와 같은 테이블이 서브쿼리 안에도 존재합니다. outer_ref 없이 그냥 "talk_num"처럼 별칭 없는
+ *        컬럼을 쓰면 SQL이 이를 바깥 쿼리가 아니라 서브쿼리 자신의 컬럼(f5.talk_num 등)으로 해석해버려서
+ *        is_quote가 항상 깨집니다(자기 자신과 비교하게 됨). 그래서 outer_ref는 항상 필수이며, 호출하는
+ *        쪽의 실제 FROM/별칭과 정확히 일치시켜야 합니다.
  */
-const iscommentandquote = (id, type_name, type_code, comment_alias = "is_comment", outer_ref = null) => {
-    const outerCol = outer_ref ? `${outer_ref}.${type_name}_num` : `${type_name}_num`;
+const iscommentandquote = (id, type_name, type_code, comment_alias = "is_comment", outer_ref) => {
+    if (!outer_ref) {
+        throw new Error("iscommentandquote: outer_ref is required (pass the outer query's table name/alias, e.g. \"p\")");
+    }
+    const outerCol = `${outer_ref}.${type_name}_num`;
     return [
         knex.raw(
             `EXISTS(

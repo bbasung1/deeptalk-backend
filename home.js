@@ -96,7 +96,7 @@ async function resort_post(type, ourid, page) {
       "profile.nickname",
       "profile.image as profile_image",
       ...islikeandbookmark(ourid, type, type_code),
-      ...iscommentandquote(ourid, type, type_code)
+      ...iscommentandquote(ourid, type, type_code, "is_comment", "p")
     )
     // .orderBy(knex.raw(rawFinalScoreSQL), 'desc');
     .orderByRaw(`${rawFreshnessScoreSQL} DESC`)

@@ -31,7 +31,7 @@ router.get("/:id", async (req, res) => {
                     .where('user_id', id);
             })
             .where("p.think_num", req.params.id)
-            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(id, "think", 1), ...iscommentandquote(id, "think", 1));
+            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(id, "think", 1), ...iscommentandquote(id, "think", 1, "is_comment", "p"));
         if (think == undefined) {
             return res.json({ msg: "없거나 비공개인 포스트 입니다" })
         }

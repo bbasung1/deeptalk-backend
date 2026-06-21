@@ -85,7 +85,7 @@ router.get("/list", async (req, res) => {
     const num_name = pt_type_name + "_num"
     const list = await knex(pt_type_name)
         .leftJoin("profile", `${pt_type_name}.writer_id`, "profile.id")
-        .select(`${pt_type_name}.*`, ...islikeandbookmark(ourid, pt_type_name, pt_type_bool), ...iscommentandquote(ourid, pt_type_name, pt_type_bool), "profile.nickname", "profile.image as profile_image").whereIn(num_name, function () {
+        .select(`${pt_type_name}.*`, ...islikeandbookmark(ourid, pt_type_name, pt_type_bool), ...iscommentandquote(ourid, pt_type_name, pt_type_bool, "is_comment", pt_type_name), "profile.nickname", "profile.image as profile_image").whereIn(num_name, function () {
             this.select("post_id").from("post_like").where({ type: pt_type_bool, user_id: ourid });
         });
     return res.json(await buildPostResponse(list, ourid));

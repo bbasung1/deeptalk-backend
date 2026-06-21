@@ -35,7 +35,7 @@ router.post("/", async (req, res) => {
                 .where('writer_id', target_id)
                 .whereNotIn('writer_id', blockedIds)
                 .leftJoin("profile", "talk.writer_id", "profile.id")
-                .select('talk.*', ...islikeandbookmark(requester_id, "talk", 0), ...iscommentandquote(requester_id, "talk", 0), "profile.nickname", "profile.image as profile_image")
+                .select('talk.*', ...islikeandbookmark(requester_id, "talk", 0), ...iscommentandquote(requester_id, "talk", 0, "is_comment", "talk"), "profile.nickname", "profile.image as profile_image")
                 .limit(10).offset(page * 10);
             return res.json(await buildPostResponse(talk, requester_id));
         }
@@ -44,7 +44,7 @@ router.post("/", async (req, res) => {
                 .where('writer_id', target_id)
                 .whereNotIn('writer_id', blockedIds)
                 .leftJoin("profile", "think.writer_id", "profile.id")
-                .select('think.*', ...islikeandbookmark(requester_id, "think", 1), ...iscommentandquote(requester_id, "think", 1), "profile.nickname", "profile.image as profile_image")
+                .select('think.*', ...islikeandbookmark(requester_id, "think", 1), ...iscommentandquote(requester_id, "think", 1, "is_comment", "think"), "profile.nickname", "profile.image as profile_image")
                 .limit(10).offset(page * 10);
             return res.json(await buildPostResponse(think, requester_id));
         }
@@ -127,7 +127,7 @@ router.post("/quote_list", async (req, res) => {
                 "p.notify_mute", "p.timestamp",
                 "profile.nickname", "profile.image as profile_image",
                 ...islikeandbookmark(requester_id, "talk", 0),
-                ...iscommentandquote(requester_id, "talk", 0)
+                ...iscommentandquote(requester_id, "talk", 0, "is_comment", "p")
             ),
         knex("think as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
@@ -142,7 +142,7 @@ router.post("/quote_list", async (req, res) => {
                 "p.notify_mute", "p.timestamp",
                 "profile.nickname", "profile.image as profile_image",
                 ...islikeandbookmark(requester_id, "think", 1),
-                ...iscommentandquote(requester_id, "think", 1)
+                ...iscommentandquote(requester_id, "think", 1, "is_comment", "p")
             ),
     ]);
 

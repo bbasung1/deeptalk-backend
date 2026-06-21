@@ -169,12 +169,12 @@ router.get("/quotes/:type/:post_id", async (req, res) => {
         knex("talk as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where({ quote_type: type, quote: req.params.post_id, 'p.draft': 0 })
-            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "talk", 0), ...iscommentandquote(userId, "talk", 0))
+            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "talk", 0), ...iscommentandquote(userId, "talk", 0, "is_comment", "p"))
             .limit(10).offset(page * 10),
         knex("think as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where({ quote_type: type, quote: req.params.post_id, 'p.draft': 0 })
-            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "think", 1), ...iscommentandquote(userId, "think", 1))
+            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "think", 1), ...iscommentandquote(userId, "think", 1, "is_comment", "p"))
             .limit(10).offset(page * 10),
         knex("comment as p")
             .leftJoin("profile", "p.user_id", "profile.user_id")
