@@ -65,7 +65,7 @@ router.post("/", upload.array("files", 6), async (req, res) => {
         const header = req.body.header || null;
         let [post_num] = await trx(table).insert({
             writer_id: writer_id,
-            user_id: user_id,
+            //user_id: user_id,
             header: header,
             subject: subject,
             reported: 0,

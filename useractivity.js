@@ -50,10 +50,10 @@ router.post("/", async (req, res) => {
         }
         if (req.body.type == "comment") {
             const comments = await knex('comment')
-                .where('comment.user_id', user_id)
-                .leftJoin("profile", "comment.user_id", "profile.user_id")
-                .whereNotIn('profile.id', blockedIds)
-                .select("comment.*", ...islikeandbookmark(requester_id, "comment", 2), ...iscommentandquote(requester_id, "comment", 2, "is_reply", "comment"), "profile.nickname", "profile.image as profile_image")
+                .where('comment.writer_id', target_id)
+                .leftJoin("profile", "comment.writer_id", "profile.id")
+                .whereNotIn('comment.writer_id', blockedIds)
+                .select("comment.*", ...islikeandbookmark(requester_id, "comment", 2), ...iscommentandquote(requester_id, "comment", 2, "is_reply", "comment"), "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image")
                 .limit(10).offset(page * 10);
             const serializedComments = comments.map(c => ({
                 ...c,

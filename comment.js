@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, user_id_to_id, islikeandbookmark, iscommentandquote, regist_file, regist_quote, regist_vote, add_nickname, getBlockedIds, extractMentionedIds, getOriginalPostWriterId } = require('./general.js');
+const { define_id, islikeandbookmark, iscommentandquote, regist_file, regist_quote, regist_vote, add_nickname, getBlockedIds, extractMentionedIds, getOriginalPostWriterId } = require('./general.js');
 const { sendReactionNotification, sendMentionNotification } = require('./fcm.js');
 const multer = require("multer");
 const upload = multer();
@@ -202,19 +202,19 @@ router.get("/", async (req, res) => {
         }
         //  댓글 쿼리 생성(준비)
         const commentQuery = knex("comment as p")
-            .leftJoin("profile", "p.user_id", "profile.user_id")
+            .leftJoin("profile", "p.writer_id", "profile.id")
             // 내가 차단한 사람이 쓴 댓글은 제외
-            .whereNotIn("profile.id", function () {
+            .whereNotIn("p.writer_id", function () {
                 this.select("blocked_user_id").from("block_list").where({ user_id: id, type: 0 });
             })
             // 나를 차단한 사람이 쓴 댓글도 제외
-            .whereNotIn("profile.id", function () {
+            .whereNotIn("p.writer_id", function () {
                 this.select("user_id").from("block_list").where({ blocked_user_id: id, type: 0 });
             })
             .select(
                 "comment_num AS comment_id",
-                "p.user_id as user_id",
-                "profile.id as writer_profile_id",
+                "profile.user_id as user_id",
+                "p.writer_id as writer_profile_id",
                 "subject",
                 "like",
                 "quote_num AS quotes",
@@ -289,11 +289,11 @@ router.get("/:comment_id", async (req, res) => {
         }
 
         const comment = await knex("comment as p")
-            .leftJoin("profile", "p.user_id", "profile.user_id")
+            .leftJoin("profile", "p.writer_id", "profile.id")
             .select(
                 "comment_num AS comment_id",
-                "p.user_id as user_id",
-                "profile.id as writer_profile_id",
+                "profile.user_id as user_id",
+                "p.writer_id as writer_profile_id",
                 "p.type",
                 "p.post_num",
                 "subject",
@@ -368,8 +368,7 @@ router.patch("/:comment_id", upload.array("files", 6), async (req, res) => {
             return res.status(404).json({ success: false, message: "댓글을 찾을 수 없습니다." });
         }
 
-        const writer_id = await user_id_to_id(comment.user_id);
-        if (Number(our_id) !== Number(writer_id)) {
+        if (Number(our_id) !== Number(comment.writer_id)) {
             await trx.rollback();
             return res.status(403).json({ success: false, message: "수정 권한이 없습니다.", code: "4101" });
         }
@@ -495,11 +494,8 @@ router.patch("/:comment_id", upload.array("files", 6), async (req, res) => {
 
 router.delete("/:comment_id", async (req, res) => {
     const id = await define_id(req.headers.authorization, res);
-    const comment_data = await knex("comment").select("user_id", "type", "post_num", "draft").where("comment_num", req.params.comment_id).first();
-    const comment_writer_id = await user_id_to_id(comment_data.user_id);
-    if (id != comment_writer_id) {
-        console.log(id);
-        console.log(comment_data.user_id);
+    const comment_data = await knex("comment").select("writer_id", "type", "post_num", "draft").where("comment_num", req.params.comment_id).first();
+    if (Number(id) !== Number(comment_data.writer_id)) {
         return res.status(403).json({ "msg": "삭제 권한이 없습니다", "success": 0 })
     }
     try {
@@ -530,8 +526,8 @@ router.post("/list", async (req, res) => {
         const blockedIds = await getBlockedIds(requester_id);
 
         const comments = await knex("comment as c")
-            .leftJoin("profile", "c.user_id", "profile.user_id")
-            .where("profile.id", requester_id)
+            .leftJoin("profile", "c.writer_id", "profile.id")
+            .where("c.writer_id", requester_id)
             .modify(function (qb) {
                 if (blockedIds.length > 0) {
                     // 원글(talk/think) 작성자가 차단 관계인 댓글 제외
@@ -556,8 +552,7 @@ router.post("/list", async (req, res) => {
                                 this.where("c.type", 2)
                                     .whereIn("c.post_num", function () {
                                         this.select("comment_num").from("comment as parent")
-                                            .join("profile as pp", "parent.user_id", "pp.user_id")
-                                            .whereIn("pp.id", blockedIds);
+                                            .whereIn("parent.writer_id", blockedIds);
                                     });
                             });
                     });
@@ -565,8 +560,8 @@ router.post("/list", async (req, res) => {
             })
             .select(
                 "c.comment_num AS comment_id",
-                "c.user_id",
-                "profile.id as writer_profile_id",
+                "profile.user_id as user_id",
+                "c.writer_id as writer_profile_id",
                 "c.subject",
                 "c.like",
                 "c.quote_num AS quotes",
