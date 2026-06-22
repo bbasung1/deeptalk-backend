@@ -34,12 +34,13 @@ router.post("/", async (req, res) => {
     const reporter_id = ourid;
 
     // 2️⃣ 요청 body 검증
-    const { post_id, post_type, report_type, reason, category } = req.body;
+    let { post_id, post_type } = req.body;
+    const { report_type, reason, category } = req.body;
     if (!category || !report_type) {
       return res.status(400).json({ success: 0, msg: "필수 항목이 누락되었습니다." });
     }
 
-    if (!["think", "talk", "comment","user"].includes(post_type)) {
+    if (!["오류가 있어요","유저를 신고하고 싶어요","클럽에게 피드백 하고 싶어요","기타"].includes(report_type)&&!["think", "talk", "comment","user"].includes(post_type)) {
       return res.status(400).json({ success: 0, msg: "유효하지 않은 post_type 값입니다." });
     }
 
@@ -62,8 +63,9 @@ router.post("/", async (req, res) => {
     if (!reportedUser && category == "report") {
       return res.status(404).json({ success: 0, msg: "해당 게시글을 찾을 수 없습니다." });
     }
-
-    const reported_id = reportedUser.writer_id;
+let reported_id;
+if(!["오류가 있어요","유저를 신고하고 싶어요","클럽에게 피드백 하고 싶어요","기타"].includes(report_type)){
+    reported_id = reportedUser.writer_id;
 
     // 4️⃣ 중복 신고 방지 (reporter_id + post_id + post_type)
     const duplicate = await knex("report")
@@ -73,6 +75,11 @@ router.post("/", async (req, res) => {
     if (duplicate) {
       return res.status(409).json({ success: 0, msg: "이미 신고한 게시글입니다." });
     }
+  }else{
+    reported_id = null;
+    post_id=null;
+    post_type=null;
+  }
 
     // 5️⃣ 신고 DB 저장
     await knex("report").insert({
