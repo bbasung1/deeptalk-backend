@@ -39,7 +39,7 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ success: 0, msg: "필수 항목이 누락되었습니다." });
     }
 
-    if (!["think", "talk", "comment"].includes(post_type)) {
+    if (!["think", "talk", "comment","user"].includes(post_type)) {
       return res.status(400).json({ success: 0, msg: "유효하지 않은 post_type 값입니다." });
     }
 
@@ -51,6 +51,8 @@ router.post("/", async (req, res) => {
       reportedUser = await knex("talk").where("talk_num", post_id).select("writer_id").first();
     } else if (post_type == "comment") {
       reportedUser = await knex("comment").where("comment_num", post_id).select("writer_id").first();
+    } else if(post_type=="user"){
+      reportedUser = await knex("profile").where("id", post_id).select("id as writer_id").first();
     }
 
     if (!reportedUser && category == "report") {
