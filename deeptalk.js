@@ -108,7 +108,7 @@ cron.schedule('0 0 * * *', async () => {
             ]);
             await Promise.all([
                 trx("block_list").where("user_id", ourid).del(),
-                trx("comment").where("user_id", ourid).del(),
+                trx("comment").where("writer_id", ourid).del(),
                 trx("talk").where("writer_id", ourid).del(),
                 trx("think").where("writer_id", ourid).del(),
                 trx("follow").where("user_id", ourid).del(),

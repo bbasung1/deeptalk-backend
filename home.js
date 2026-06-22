@@ -93,6 +93,7 @@ async function resort_post(type, ourid, page) {
     // select 내에서 knex.raw()를 사용하여 계산된 컬럼에 별칭(Alias)을 지정합니다.
     .select(
       'p.*',
+      "profile.user_id as user_id",
       "profile.nickname",
       "profile.image as profile_image",
       ...islikeandbookmark(ourid, type, type_code),

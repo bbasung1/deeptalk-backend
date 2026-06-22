@@ -122,13 +122,14 @@ router.get("/comment/:comment_id", async (req, res) => {
     }
 
     const content = await knex("comment as p")
-        .leftJoin("profile", "p.user_id", "profile.user_id")
+        .leftJoin("profile", "p.writer_id", "profile.id")
         .select(
             "p.*",
             "p.comment_num AS comment_id",
+            "profile.user_id as user_id",
             "profile.nickname",
             "profile.image",
-            "profile.id as writer_profile_id",
+            "p.writer_id as writer_profile_id",
             ...iscommentandquote(requester_id, "comment", 2, "is_reply", "p")
         )
         .where("p.comment_num", req.params.comment_id).first();
@@ -169,17 +170,17 @@ router.get("/quotes/:type/:post_id", async (req, res) => {
         knex("talk as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where({ quote_type: type, quote: req.params.post_id, 'p.draft': 0 })
-            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "talk", 0), ...iscommentandquote(userId, "talk", 0, "is_comment", "p"))
+            .select('p.*', "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "talk", 0), ...iscommentandquote(userId, "talk", 0, "is_comment", "p"))
             .limit(10).offset(page * 10),
         knex("think as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where({ quote_type: type, quote: req.params.post_id, 'p.draft': 0 })
-            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "think", 1), ...iscommentandquote(userId, "think", 1, "is_comment", "p"))
+            .select('p.*', "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "think", 1), ...iscommentandquote(userId, "think", 1, "is_comment", "p"))
             .limit(10).offset(page * 10),
         knex("comment as p")
-            .leftJoin("profile", "p.user_id", "profile.user_id")
+            .leftJoin("profile", "p.writer_id", "profile.id")
             .where({ quote_type: type, quote: req.params.post_id })
-            .select('p.*', "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "comment", 2), ...iscommentandquote(userId, "comment", 2, "is_reply", "p"))
+            .select('p.*', "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "comment", 2), ...iscommentandquote(userId, "comment", 2, "is_reply", "p"))
             .limit(10).offset(page * 10),
     ]);
 
