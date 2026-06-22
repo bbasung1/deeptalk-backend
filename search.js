@@ -36,7 +36,7 @@ router.post("/", async (req, res) => {
                     .orWhere('p.subject', 'like', `%${req.body.searchparam}%`);
             })
             .leftJoin("profile", "p.writer_id", "profile.id")
-            .select('p.*', 'profile.nickname', 'profile.image as profile_image', ...islikeandbookmark(id, "talk", 0), ...iscommentandquote(id, "talk", 0, "is_comment", "p"))
+            .select('p.*', 'profile.user_id as user_id', 'profile.nickname', 'profile.image as profile_image', ...islikeandbookmark(id, "talk", 0), ...iscommentandquote(id, "talk", 0, "is_comment", "p"))
             .limit(10).offset(page * 10);
         return res.json(await buildPostResponse(talk, id));
     }
@@ -52,7 +52,7 @@ router.post("/", async (req, res) => {
                     .orWhere('p.subject', 'like', `%${req.body.searchparam}%`);
             })
             .leftJoin("profile", "p.writer_id", "profile.id")
-            .select('p.*', 'profile.nickname', 'profile.image as profile_image', ...islikeandbookmark(id, "think", 1), ...iscommentandquote(id, "think", 1, "is_comment", "p"))
+            .select('p.*', 'profile.user_id as user_id', 'profile.nickname', 'profile.image as profile_image', ...islikeandbookmark(id, "think", 1), ...iscommentandquote(id, "think", 1, "is_comment", "p"))
             .limit(10)
             .offset(page * 10);
         return res.json(await buildPostResponse(think, id));

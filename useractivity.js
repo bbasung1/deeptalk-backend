@@ -35,7 +35,7 @@ router.post("/", async (req, res) => {
                 .where('writer_id', target_id)
                 .whereNotIn('writer_id', blockedIds)
                 .leftJoin("profile", "talk.writer_id", "profile.id")
-                .select('talk.*', ...islikeandbookmark(requester_id, "talk", 0), ...iscommentandquote(requester_id, "talk", 0, "is_comment", "talk"), "profile.nickname", "profile.image as profile_image")
+                .select('talk.*', ...islikeandbookmark(requester_id, "talk", 0), ...iscommentandquote(requester_id, "talk", 0, "is_comment", "talk"), "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image")
                 .limit(10).offset(page * 10);
             return res.json(await buildPostResponse(talk, requester_id));
         }
@@ -44,7 +44,7 @@ router.post("/", async (req, res) => {
                 .where('writer_id', target_id)
                 .whereNotIn('writer_id', blockedIds)
                 .leftJoin("profile", "think.writer_id", "profile.id")
-                .select('think.*', ...islikeandbookmark(requester_id, "think", 1), ...iscommentandquote(requester_id, "think", 1, "is_comment", "think"), "profile.nickname", "profile.image as profile_image")
+                .select('think.*', ...islikeandbookmark(requester_id, "think", 1), ...iscommentandquote(requester_id, "think", 1, "is_comment", "think"), "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image")
                 .limit(10).offset(page * 10);
             return res.json(await buildPostResponse(think, requester_id));
         }
@@ -120,12 +120,12 @@ router.post("/quote_list", async (req, res) => {
             .whereNotNull("p.quote")
             .modify(quoteBlockFilter)
             .select(
-                "p.talk_num", "p.writer_id", "p.user_id", "p.header", "p.subject",
+                "p.talk_num", "p.writer_id", "p.header", "p.subject",
                 "p.like", "p.comment", "p.views", "p.mylist", "p.quote_num",
                 "p.quote", "p.quote_type", "p.photo", "p.photo_1", "p.photo_2",
                 "p.photo_3", "p.photo_4", "p.photo_5", "p.vote", "p.draft",
                 "p.notify_mute", "p.timestamp",
-                "profile.nickname", "profile.image as profile_image",
+                "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image",
                 ...islikeandbookmark(requester_id, "talk", 0),
                 ...iscommentandquote(requester_id, "talk", 0, "is_comment", "p")
             ),
@@ -135,12 +135,12 @@ router.post("/quote_list", async (req, res) => {
             .whereNotNull("p.quote")
             .modify(quoteBlockFilter)
             .select(
-                "p.think_num", "p.writer_id", "p.user_id", "p.header", "p.subject",
+                "p.think_num", "p.writer_id", "p.header", "p.subject",
                 "p.like", "p.comment", "p.views", "p.mylist", "p.quote_num",
                 "p.quote", "p.quote_type", "p.photo", "p.photo_1", "p.photo_2",
                 "p.photo_3", "p.photo_4", "p.photo_5", "p.vote", "p.draft",
                 "p.notify_mute", "p.timestamp",
-                "profile.nickname", "profile.image as profile_image",
+                "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image",
                 ...islikeandbookmark(requester_id, "think", 1),
                 ...iscommentandquote(requester_id, "think", 1, "is_comment", "p")
             ),
