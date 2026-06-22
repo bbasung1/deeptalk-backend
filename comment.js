@@ -103,6 +103,7 @@ router.post("/", upload.array("files", 6), async (req, res) => {
             post_num,
             subject,
             user_id: user.user_id,
+            writer_id: our_id,
             reported: 0,
             ...photoFields,
             quote,
