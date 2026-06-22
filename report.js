@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id } = require("./general.js");
+const { define_id,user_id_to_id } = require("./general.js");
 
 const { stream } = require("./log.js");
 const morgan = require("morgan");
@@ -52,6 +52,10 @@ router.post("/", async (req, res) => {
     } else if (post_type == "comment") {
       reportedUser = await knex("comment").where("comment_num", post_id).select("writer_id").first();
     } else if(post_type=="user"){
+      post_id = await user_id_to_id(post_id);
+      if(!post_id){
+        return res.status(404).json({ success: 0, msg: "해당 사용자를 찾을 수 없습니다." });
+      }
       reportedUser = await knex("profile").where("id", post_id).select("id as writer_id").first();
     }
 
