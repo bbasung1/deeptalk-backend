@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, id_to_user_id, add_nickname, regist_file, regist_quote, regist_vote, extractMentionedIds } = require('./general.js');
+const { define_id, id_to_user_id, add_nickname, regist_file, regist_quote, regist_vote, extractMentionedIds, logContentEvent } = require('./general.js');
 const { sendPostNotification, sendMentionNotification } = require('./fcm.js');
 const { buildPostResponse } = require("./postSerializer.js");
 const multer = require("multer");
@@ -89,6 +89,11 @@ router.post("/", upload.array("files", 6), async (req, res) => {
         }
         await trx.commit();
         res.status(201).json({ success: true, message: "글이 성공적으로 등록되었습니다.", id: post_num });
+
+        // 첫 글 시각 등 분석용 기록 (이어서 게시하기 draft는 실제 게시가 아니므로 제외, 응답 블로킹 방지를 위해 await 생략)
+        if (draft == 0) {
+            logContentEvent(writer_id, table === "talk" ? "post_talk" : "post_think");
+        }
 
         // 팔로워에게 FCM 알림 발송 (응답 블로킹 방지를 위해 await 생략)
         const nickname = await add_nickname(writer_id);

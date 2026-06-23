@@ -166,6 +166,23 @@ async function logLogin(userId, platform) {
     }
 }
 
+// talk/think/comment/post_like는 모두 하드 삭제(.del())되는 테이블이라, 삭제 후에도
+// "첫 글/첫 반응 시각" 같은 집계가 가능하도록 별도 append-only 로그에 기록한다.
+// 게시물 본문 등 민감한 내용은 절대 넘기지 말 것 (content_event_log에는 종류/시각만 저장).
+const CONTENT_EVENT_TYPES = new Set(["post_talk", "post_think", "comment", "like"]);
+
+async function logContentEvent(userId, eventType) {
+    if (!userId || !CONTENT_EVENT_TYPES.has(eventType)) {
+        console.error("logContentEvent: invalid args", { userId, eventType });
+        return;
+    }
+    try {
+        await knex("content_event_log").insert({ user_id: userId, event_type: eventType });
+    } catch (err) {
+        console.error("logContentEvent failed:", err);
+    }
+}
+
 function make_code(len) {
     let aucode = ""
     for (let i = 1; i <= len; i++) {
@@ -405,6 +422,7 @@ module.exports = {
     getOriginalPostWriterId,
     make_code,
     logLogin,
+    logContentEvent,
     add_nickname,
     id_to_user_id,
     user_id_to_id,
