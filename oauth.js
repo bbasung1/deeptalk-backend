@@ -8,7 +8,7 @@ const knex = require("./knex.js");
 const qs = require("querystring");
 const fs = require('fs');
 const mailer = require("nodemailer");
-const { define_id, tmp_convert_our_id, make_code } = require('./general.js')
+const { define_id, tmp_convert_our_id, make_code, logLogin } = require('./general.js')
 
 const kakaoJwksClient = jwksRsa({
   jwksUri: "https://kauth.kakao.com/.well-known/jwks.json",
@@ -429,7 +429,8 @@ router.post("/login", async (req, res) => {
             knex("user")
               .where("kakao_id", sub)
               .update(insertdata)
-              .then(() => {
+              .then(async () => {
+                await logLogin(tokendata[0].id, "kakao");
                 res.json(senddata);
               });
           })
@@ -440,7 +441,7 @@ router.post("/login", async (req, res) => {
       });
   } else if (iss == "https://appleid.apple.com") {
     knex
-      .select("apple_access_code", "apple_refresh_code", "apple_id_token", "deletetime")
+      .select("apple_access_code", "apple_refresh_code", "apple_id_token", "deletetime", "id")
       .from("user")
       .where("apple_id", sub)
       .then((tokendata) => {
@@ -477,7 +478,8 @@ router.post("/login", async (req, res) => {
             knex("user")
               .where("apple_id", sub)
               .update(insertdata)
-              .then(() => {
+              .then(async () => {
+                await logLogin(tokendata[0].id, "apple");
                 res.json(senddata);
               });
           })
@@ -488,10 +490,14 @@ router.post("/login", async (req, res) => {
       });
   } else if (iss == "jamdeeptalk.com") {
     let sub = decodetoken.sub
+    let platform = "discord";
     if (decodetoken.is_discord != undefined) {
       const [id] = await knex("user").select("id").where("discord_id", decodetoken.sub);
       console.log(id.id);
       sub = id.id;
+    } else {
+      // discord가 아닌데 jamdeeptalk.com 토큰으로 들어온 경우는 기존 jwt 재발급(자체 로그인 갱신) 흐름
+      platform = "jamdeeptalk";
     }
     const token = jwt.sign({ email: decodetoken.email, sub: sub }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
     await knex("user").update({ our_jwt: token }).where("id", sub)
@@ -502,6 +508,7 @@ router.post("/login", async (req, res) => {
       willdelete = 1;
       deletetime = is_delete.deletetime;
     }
+    await logLogin(sub, platform);
     res.json({ id_token: token, willdelete, deletetime });
   } else if (iss == "https://accounts.google.com") {
     const [id] = await knex.select("google_access_code", "google_refresh_code", "id", "deletetime").from("user").where("google_id", sub);
@@ -516,6 +523,7 @@ router.post("/login", async (req, res) => {
       deletetime = id.deletetime;
     }
     const token = jwt.sign({ email: decodetoken.email, sub: id.id }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
+    await logLogin(id.id, "google");
     return res.json({ id_token: token, willdelete, deletetime });
   }
 });

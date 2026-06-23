@@ -147,6 +147,25 @@ async function handleBlockAction(req, res, actionType) {
     }
 }
 
+// "jamdeeptalk"는 이미 발급된 자체 JWT를 갱신하는 경로(앱 재실행 시 보통 여기로 들어옴)이므로
+// 리텐션 집계에서 가장 중요한 플랫폼 값이다.
+const LOGIN_PLATFORMS = new Set(["kakao", "apple", "google", "discord", "jamdeeptalk"]);
+
+// 로그인 시각/플랫폼 기록. 분석용 데이터일 뿐이라 실패해도 로그인 자체를 막으면 안 되므로
+// 호출하는 쪽에서 await 하더라도 에러가 위로 전파되지 않게 내부에서 흡수한다.
+// 토큰류는 절대 여기에 넘기지 말 것 (login_log 테이블에는 시각/플랫폼만 저장).
+async function logLogin(userId, platform) {
+    if (!userId || !LOGIN_PLATFORMS.has(platform)) {
+        console.error("logLogin: invalid args", { userId, platform });
+        return;
+    }
+    try {
+        await knex("login_log").insert({ user_id: userId, platform });
+    } catch (err) {
+        console.error("logLogin failed:", err);
+    }
+}
+
 function make_code(len) {
     let aucode = ""
     for (let i = 1; i <= len; i++) {
@@ -385,6 +404,7 @@ module.exports = {
     extractMentionedIds,
     getOriginalPostWriterId,
     make_code,
+    logLogin,
     add_nickname,
     id_to_user_id,
     user_id_to_id,
