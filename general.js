@@ -73,7 +73,14 @@ async function define_id(test_id, res) {
             const { httpcode, ...rest } = id;
             // console.log(httpcode);
             console.log(rest);
-            return res.status(httpcode).json(rest);
+            // 주의: 이 함수는 인증 실패 시 res로 에러 응답을 "직접" 보낸다.
+            // 과거에는 여기서 res.status(...).json(...)의 반환값(express의 res 객체, 항상 truthy)을
+            // 그대로 돌려줬는데, 그러면 호출하는 쪽의 `if (!id) return;` 체크가 절대 true가 되지 않아서
+            // 인증 실패 후에도 코드가 계속 진행되다가 응답을 두 번 보내려고 해서 서버가 죽는 버그가 있었음.
+            // 그래서 응답은 여기서 보내고 반환값은 falsy(null)로 고정한다.
+            // 호출하는 쪽에서는 이 함수 호출 직후 `if (res.headersSent) return;`로 한 번 더 막아줄 것.
+            res.status(httpcode).json(rest);
+            return null;
         }
     };
     return id;

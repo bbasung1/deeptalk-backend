@@ -16,6 +16,7 @@ router.use(
 
 router.post("/:user_id", async (req, res) => {
     const ourid = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     if (!ourid) {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }
@@ -49,6 +50,7 @@ router.post("/:user_id", async (req, res) => {
 
 router.get("/list", async (req, res) => {
     const ourid = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     if (!ourid) {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }
@@ -67,6 +69,7 @@ router.get("/list", async (req, res) => {
 router.get("/is_follow", async (req, res) => {
     let mutal = 1
     const ourid = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     const target_user_id = req.query.user_id;
     const target_id = await user_id_to_id(target_user_id);
     if (target_id == undefined) {

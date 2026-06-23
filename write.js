@@ -33,6 +33,7 @@ router.post("/", upload.array("files", 6), async (req, res) => {
 
     try {
         const writer_id = await define_id(req.headers.authorization, res);  // 내부 ID로 변환
+        if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
         // profile.user_id를 user.id로로
         if (!writer_id) {
             return res.status(404).json({ success: false, message: "user_id에 해당하는 profile이 없습니다." });
@@ -274,6 +275,7 @@ router.patch("/:mode/:id/mute", async (req, res) => {
     }
 
     const writer_id = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     if (!writer_id) {
         return res.status(401).json({ success: false, message: "로그인이 필요합니다." });
     }
