@@ -244,13 +244,14 @@ async function first_activity(res) {
         // 삭제된 글/반응까지 포함해 "첫 활동 시각"을 정확히 집계할 수 있음.
         const rows = await knex("content_event_log as e")
             .join("user as u", "u.id", "e.user_id")
+            .leftJoin("profile as p", "p.id", "u.id")
             .select(
                 "u.id",
-                "u.user_id",
+                "p.user_id",
                 knex.raw("MIN(CASE WHEN e.event_type IN ('post_talk', 'post_think') THEN e.created_at END) as first_post_at"),
                 knex.raw("MIN(CASE WHEN e.event_type IN ('comment', 'like') THEN e.created_at END) as first_reaction_at")
             )
-            .groupBy("u.id", "u.user_id")
+            .groupBy("u.id", "p.user_id")
             .orderBy("u.id", "asc");
 
         let data = `
