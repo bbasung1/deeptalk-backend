@@ -51,6 +51,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerFile));
 app.use("/vote", require("./vote.js"));
 app.use("/fcm", require("./fcm.js"));
 app.use("/mention", require("./mention.js"));
+app.use("/onboarding", require("./onboarding.js"));
 morgan.token("status", function (req, res) {
     let color;
     if (res.statusCode == 404) color = "\x1B[44m";
