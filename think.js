@@ -21,6 +21,7 @@ router.get("/:id", async (req, res) => {
     console.log(user_id);
     if (user_id != undefined) {
         id = await define_id(user_id, res);
+        if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     };
     try {
         const [think] = await knex('think as p')
@@ -47,10 +48,14 @@ router.get("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
     const id_token = req.headers.authorization;
     const id = await define_id(id_token, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     const trx = await knex.transaction();
     console.log(id);
     const senddata = { success: 1 }
     const post_info = await knex("think").select("writer_id", "quote", "quote_type", "vote", "draft").where("think_num", req.params.id).first();
+    if (!post_info) {
+        return res.status(404).json({ msg: "글을 찾을 수 없습니다" });
+    }
     if (id != post_info.writer_id) {
         return res.status(403).json({ "msg": "삭제 권한이 없습니다", "code": "4101" })
     }

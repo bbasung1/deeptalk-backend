@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, islikeandbookmark, iscommentandquote, regist_file, regist_quote, regist_vote, add_nickname, getBlockedIds, extractMentionedIds, getOriginalPostWriterId } = require('./general.js');
+const { define_id, islikeandbookmark, iscommentandquote, regist_file, regist_quote, regist_vote, add_nickname, getBlockedIds, extractMentionedIds, getOriginalPostWriterId, logContentEvent } = require('./general.js');
 const { sendReactionNotification, sendMentionNotification } = require('./fcm.js');
 const multer = require("multer");
 const upload = multer();
@@ -23,6 +23,7 @@ router.post("/", upload.array("files", 6), async (req, res) => {
     const post_num = parseInt(req.body.post_num);
     const { subject } = req.body;
     const our_id = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     const draft = req.body.draft ?? 0;
     console.log(req.body);
     console.log(our_id);
@@ -128,6 +129,11 @@ router.post("/", upload.array("files", 6), async (req, res) => {
             comment_num
         });
 
+        // 첫 반응(댓글) 시각 등 분석용 기록 (이어서 게시하기 draft는 제외, 응답 블로킹 방지를 위해 await 생략)
+        if (draft == 0) {
+            logContentEvent(our_id, "comment");
+        }
+
         // 게시물 작성자에게 반응 알림 발송 (응답 블로킹 방지를 위해 await 생략, talk/think에만 해당)
         const nickname = await add_nickname(our_id);
         if (targetTable === "talk" || targetTable === "think") {
@@ -170,6 +176,7 @@ router.get("/", async (req, res) => {
         let id = null;
         if (req.headers.authorization) {
             id = await define_id(req.headers.authorization, res);
+            if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
         }
         const type = parseInt(req.query.type);
         const post_num = parseInt(req.query.post_num);
@@ -278,6 +285,7 @@ router.get("/:comment_id", async (req, res) => {
         let id = null;
         if (req.headers.authorization) {
             id = await define_id(req.headers.authorization, res);
+            if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
         }
         const comment_id = parseInt(req.params.comment_id);
 
@@ -494,7 +502,11 @@ router.patch("/:comment_id", upload.array("files", 6), async (req, res) => {
 
 router.delete("/:comment_id", async (req, res) => {
     const id = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     const comment_data = await knex("comment").select("writer_id", "type", "post_num", "draft").where("comment_num", req.params.comment_id).first();
+    if (!comment_data) {
+        return res.status(404).json({ "msg": "댓글을 찾을 수 없습니다", "success": 0 });
+    }
     if (Number(id) !== Number(comment_data.writer_id)) {
         return res.status(403).json({ "msg": "삭제 권한이 없습니다", "success": 0 })
     }

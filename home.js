@@ -22,6 +22,7 @@ router.use(
 router.get("/Jam-Talk", async (req, res) => {
   try {
     const ourid = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     if (!ourid) return res.json({ error: "인증 실패" }); // 인증 실패 시 종료
     const page = req.query.page || 0;
 
@@ -38,6 +39,7 @@ router.get("/Jam-Talk", async (req, res) => {
 router.get("/Jin-Talk", async (req, res) => {
   try {
     const ourid = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     if (!ourid) return; // 인증 실패 시 종료
     const page = parseInt(req.query.page) || 0;
 

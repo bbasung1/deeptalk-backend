@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, islikeandbookmark, iscommentandquote, add_nickname } = require('./general.js');
+const { define_id, islikeandbookmark, iscommentandquote, add_nickname, logContentEvent } = require('./general.js');
 const { buildPostResponse } = require("./postSerializer.js");
 const { sendReactionNotification } = require('./fcm.js');
 router.use(express.json());
@@ -16,6 +16,7 @@ router.use(
 );
 router.post("/:id", async (req, res) => {
     const ourid = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     if (!ourid) {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }
@@ -52,6 +53,9 @@ router.post("/:id", async (req, res) => {
         console.log("추가output:", output)
         res.json({ success: 1, msg: "좋아요 완료", like: output.like });
 
+        // 첫 반응(좋아요) 시각 등 분석용 기록 (응답 블로킹 방지를 위해 await 생략, 해제 시에는 기록하지 않음)
+        logContentEvent(ourid, "like");
+
         // 게시물 작성자에게 반응 알림 발송 (응답 블로킹 방지를 위해 await 생략, talk/think에만 해당)
         if (type === "talk" || type === "think") {
             const nickname = await add_nickname(ourid);
@@ -74,6 +78,7 @@ router.post("/:id", async (req, res) => {
 
 router.get("/list", async (req, res) => {
     const ourid = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     if (!ourid) {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }

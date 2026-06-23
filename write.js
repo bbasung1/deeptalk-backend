@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, id_to_user_id, add_nickname, regist_file, regist_quote, regist_vote, extractMentionedIds } = require('./general.js');
+const { define_id, id_to_user_id, add_nickname, regist_file, regist_quote, regist_vote, extractMentionedIds, logContentEvent } = require('./general.js');
 const { sendPostNotification, sendMentionNotification } = require('./fcm.js');
 const { buildPostResponse } = require("./postSerializer.js");
 const multer = require("multer");
@@ -33,6 +33,7 @@ router.post("/", upload.array("files", 6), async (req, res) => {
 
     try {
         const writer_id = await define_id(req.headers.authorization, res);  // 내부 ID로 변환
+        if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
         // profile.user_id를 user.id로로
         if (!writer_id) {
             return res.status(404).json({ success: false, message: "user_id에 해당하는 profile이 없습니다." });
@@ -89,6 +90,11 @@ router.post("/", upload.array("files", 6), async (req, res) => {
         }
         await trx.commit();
         res.status(201).json({ success: true, message: "글이 성공적으로 등록되었습니다.", id: post_num });
+
+        // 첫 글 시각 등 분석용 기록 (이어서 게시하기 draft는 실제 게시가 아니므로 제외, 응답 블로킹 방지를 위해 await 생략)
+        if (draft == 0) {
+            logContentEvent(writer_id, table === "talk" ? "post_talk" : "post_think");
+        }
 
         // 팔로워에게 FCM 알림 발송 (응답 블로킹 방지를 위해 await 생략)
         const nickname = await add_nickname(writer_id);
@@ -269,6 +275,7 @@ router.patch("/:mode/:id/mute", async (req, res) => {
     }
 
     const writer_id = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     if (!writer_id) {
         return res.status(401).json({ success: false, message: "로그인이 필요합니다." });
     }

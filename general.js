@@ -73,7 +73,14 @@ async function define_id(test_id, res) {
             const { httpcode, ...rest } = id;
             // console.log(httpcode);
             console.log(rest);
-            return res.status(httpcode).json(rest);
+            // 주의: 이 함수는 인증 실패 시 res로 에러 응답을 "직접" 보낸다.
+            // 과거에는 여기서 res.status(...).json(...)의 반환값(express의 res 객체, 항상 truthy)을
+            // 그대로 돌려줬는데, 그러면 호출하는 쪽의 `if (!id) return;` 체크가 절대 true가 되지 않아서
+            // 인증 실패 후에도 코드가 계속 진행되다가 응답을 두 번 보내려고 해서 서버가 죽는 버그가 있었음.
+            // 그래서 응답은 여기서 보내고 반환값은 falsy(null)로 고정한다.
+            // 호출하는 쪽에서는 이 함수 호출 직후 `if (res.headersSent) return;`로 한 번 더 막아줄 것.
+            res.status(httpcode).json(rest);
+            return null;
         }
     };
     return id;
@@ -144,6 +151,42 @@ async function handleBlockAction(req, res, actionType) {
             console.error(err);
             return res.status(500).json({ success: false, message: "서버 오류" });
         }
+    }
+}
+
+// "jamdeeptalk"는 이미 발급된 자체 JWT를 갱신하는 경로(앱 재실행 시 보통 여기로 들어옴)이므로
+// 리텐션 집계에서 가장 중요한 플랫폼 값이다.
+const LOGIN_PLATFORMS = new Set(["kakao", "apple", "google", "discord", "jamdeeptalk"]);
+
+// 로그인 시각/플랫폼 기록. 분석용 데이터일 뿐이라 실패해도 로그인 자체를 막으면 안 되므로
+// 호출하는 쪽에서 await 하더라도 에러가 위로 전파되지 않게 내부에서 흡수한다.
+// 토큰류는 절대 여기에 넘기지 말 것 (login_log 테이블에는 시각/플랫폼만 저장).
+async function logLogin(userId, platform) {
+    if (!userId || !LOGIN_PLATFORMS.has(platform)) {
+        console.error("logLogin: invalid args", { userId, platform });
+        return;
+    }
+    try {
+        await knex("login_log").insert({ user_id: userId, platform });
+    } catch (err) {
+        console.error("logLogin failed:", err);
+    }
+}
+
+// talk/think/comment/post_like는 모두 하드 삭제(.del())되는 테이블이라, 삭제 후에도
+// "첫 글/첫 반응 시각" 같은 집계가 가능하도록 별도 append-only 로그에 기록한다.
+// 게시물 본문 등 민감한 내용은 절대 넘기지 말 것 (content_event_log에는 종류/시각만 저장).
+const CONTENT_EVENT_TYPES = new Set(["post_talk", "post_think", "comment", "like"]);
+
+async function logContentEvent(userId, eventType) {
+    if (!userId || !CONTENT_EVENT_TYPES.has(eventType)) {
+        console.error("logContentEvent: invalid args", { userId, eventType });
+        return;
+    }
+    try {
+        await knex("content_event_log").insert({ user_id: userId, event_type: eventType });
+    } catch (err) {
+        console.error("logContentEvent failed:", err);
     }
 }
 
@@ -385,6 +428,8 @@ module.exports = {
     extractMentionedIds,
     getOriginalPostWriterId,
     make_code,
+    logLogin,
+    logContentEvent,
     add_nickname,
     id_to_user_id,
     user_id_to_id,

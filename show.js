@@ -164,6 +164,7 @@ router.get("/quotes/:type/:post_id", async (req, res) => {
     let userId = null;
     if (req.headers.authorization) {
         userId = await define_id(req.headers.authorization, res);
+        if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     }
 
     const [list1, list2, list3] = await Promise.all([
