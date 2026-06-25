@@ -23,7 +23,7 @@ router.post("/", upload.array("files", 6), async (req, res) => {
     const { mode, subject } = req.body;
     console.log(req.body);
     const trx = await knex.transaction();
-    if (!mode || !subject) {
+    if (!mode ||(!subject && !req.body.vote)) {
         return res.status(400).json({ success: false, message: "모든 필드를 입력해주세요." });
     }
 

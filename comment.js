@@ -30,7 +30,7 @@ router.post("/", upload.array("files", 6), async (req, res) => {
     console.log(type);
     console.log(post_num);
     console.log(subject);
-    if (!our_id || isNaN(type) || isNaN(post_num) || !subject) {
+    if (!our_id || isNaN(type) || isNaN(post_num) || (!subject&& !req.body.vote)) {
         return res.status(400).json({
             success: false,
             message: "jwt_token, type, post_num, subject 모두 필요합니다."
