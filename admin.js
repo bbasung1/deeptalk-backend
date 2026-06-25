@@ -34,7 +34,7 @@ ${body}
 }
 function admin_block(res) {
     let data = `
-  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a><br>
+  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a><br>
   <h1>신고 명단</h1>
     <table border="1">
     <tr>
@@ -86,7 +86,7 @@ async function member(res) {
                 .count('id as count')
         ]);
         let data = `
-            <a href="/admin/logout">logout <a href="/admin/setblock">신고 현황 페이지로 </a><a href="/admin/post">글 현황 페이지로</a><br>
+            <a href="/admin/logout">logout <a href="/admin/setblock">신고 현황 페이지로 </a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a><br>
             <h1>회원 통계</h1>
             <table border="1">
                 <tr>
@@ -150,7 +150,7 @@ async function member(res) {
 
 async function post(res) {
     let data = `
-        <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a><br>
+        <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a><br>
 <h1>글 목록</h1>
 <table border="1">
 <tr>
@@ -238,6 +238,49 @@ async function post(res) {
     admin_html("posttest", data, res);
 }
 
+async function first_activity(res) {
+    try {
+        // content_event_log는 talk/think/comment/post_like가 하드 삭제돼도 남는 append-only 로그라서
+        // 삭제된 글/반응까지 포함해 "첫 활동 시각"을 정확히 집계할 수 있음.
+        const rows = await knex("content_event_log as e")
+            .join("user as u", "u.id", "e.user_id")
+            .leftJoin("profile as p", "p.id", "u.id")
+            .select(
+                "u.id",
+                "p.user_id",
+                knex.raw("MIN(CASE WHEN e.event_type IN ('post_talk', 'post_think') THEN e.created_at END) as first_post_at"),
+                knex.raw("MIN(CASE WHEN e.event_type IN ('comment', 'like') THEN e.created_at END) as first_reaction_at")
+            )
+            .groupBy("u.id", "p.user_id")
+            .orderBy("u.id", "asc");
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a><br>
+            <h1>첫 글 / 첫 반응 시각</h1>
+            <table border="1">
+                <tr>
+                    <td>id</td>
+                    <td>첫 글 작성 시각</td>
+                    <td>첫 반응(좋아요/댓글) 시각</td>
+                </tr>
+        `;
+        for (const row of rows) {
+            data += `
+                <tr>
+                    <td>${row.user_id}</td>
+                    <td>${row.first_post_at ? row.first_post_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "-"}</td>
+                    <td>${row.first_reaction_at ? row.first_reaction_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "-"}</td>
+                </tr>
+            `;
+        }
+        data += `</table>`;
+        admin_html("첫 글 / 첫 반응 시각", data, res);
+    } catch (error) {
+        console.error("Error in first_activity function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
 function login(res) {
     let data = `
   <form method="post" action="/admin/login">
@@ -287,5 +330,8 @@ router.get("/member", (req, res) => {
 });
 router.get("/post", (req, res) => {
     check_login(post(res), req, res);
+});
+router.get("/first_activity", (req, res) => {
+    check_login(first_activity(res), req, res);
 });
 module.exports = router;
