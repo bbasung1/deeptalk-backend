@@ -44,7 +44,14 @@ router.post("/info", async (req, res) => {
       })
       .first();
     if (blocked) {
-      return res.status(403).json({ msg: "프로필을 조회할 수 없습니다.", code: "4031" });
+      return res.json({
+        id: data.id,
+        user_id: data.user_id,
+        nickname: data.nickname,
+        status_message: data.status_message,
+        image: data.image,
+        blocked: true,
+      });
     }
   }
 
