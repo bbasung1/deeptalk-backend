@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
+const crypto = require("crypto");
 const dotenv = require("dotenv");
 dotenv.config();
 const session = [];
@@ -34,7 +35,7 @@ ${body}
 }
 function admin_block(res) {
     let data = `
-  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a><br>
+  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
   <h1>신고 명단</h1>
     <table border="1">
     <tr>
@@ -86,7 +87,7 @@ async function member(res) {
                 .count('id as count')
         ]);
         let data = `
-            <a href="/admin/logout">logout <a href="/admin/setblock">신고 현황 페이지로 </a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a><br>
+            <a href="/admin/logout">logout <a href="/admin/setblock">신고 현황 페이지로 </a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
             <h1>회원 통계</h1>
             <table border="1">
                 <tr>
@@ -150,7 +151,7 @@ async function member(res) {
 
 async function post(res) {
     let data = `
-        <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a><br>
+        <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
 <h1>글 목록</h1>
 <table border="1">
 <tr>
@@ -238,6 +239,71 @@ async function post(res) {
     admin_html("posttest", data, res);
 }
 
+// 접속 간격이 이 값(분) 이상 벌어지면 새 세션으로 간주한다.
+// login_log는 oauth 재로그인뿐 아니라 자체 JWT 갱신(jamdeeptalk, 앱 재실행 시)도 기록하므로
+// 이 값을 기준으로 "하루에 몇 번 들어왔는지"를 근사할 수 있다.
+const SESSION_GAP_MINUTES = 30;
+
+async function session_count(res) {
+    try {
+        // login_log를 user_id, created_at 순으로 본 뒤, 바로 앞 행과의 간격이
+        // SESSION_GAP_MINUTES 이상이거나(또는 그 유저의 첫 로그) 새 세션 시작으로 표시(LAG 윈도우 함수).
+        // 그렇게 표시된 행만 날짜별로 세면 유저별 일별 세션 횟수가 됨.
+        const [rows] = await knex.raw(
+            `
+            WITH flagged AS (
+                SELECT
+                    l.user_id,
+                    l.created_at,
+                    LAG(l.created_at) OVER (PARTITION BY l.user_id ORDER BY l.created_at) AS prev_created_at
+                FROM login_log l
+            )
+            SELECT
+                f.user_id AS id,
+                p.user_id AS profile_user_id,
+                DATE(f.created_at) AS log_date,
+                COUNT(*) AS session_count
+            FROM flagged f
+            JOIN user u ON u.id = f.user_id
+            LEFT JOIN profile p ON p.id = u.id
+            WHERE f.prev_created_at IS NULL
+               OR TIMESTAMPDIFF(MINUTE, f.prev_created_at, f.created_at) >= ?
+            GROUP BY f.user_id, p.user_id, DATE(f.created_at)
+            ORDER BY f.user_id ASC, log_date ASC
+            `,
+            [SESSION_GAP_MINUTES]
+        );
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <h1>일별 유저별 세션 횟수 (접속 간격 ${SESSION_GAP_MINUTES}분 기준)</h1>
+            <table border="1">
+                <tr>
+                    <td>id</td>
+                    <td>날짜</td>
+                    <td>세션 횟수</td>
+                </tr>
+        `;
+        for (const row of rows) {
+            const dateStr = row.log_date instanceof Date
+                ? row.log_date.toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })
+                : row.log_date;
+            data += `
+                <tr>
+                    <td>${row.profile_user_id ?? row.id}</td>
+                    <td>${dateStr}</td>
+                    <td>${row.session_count}</td>
+                </tr>
+            `;
+        }
+        data += `</table>`;
+        admin_html("일별 유저별 세션 횟수", data, res);
+    } catch (error) {
+        console.error("Error in session_count function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
 async function first_activity(res) {
     try {
         // content_event_log는 talk/think/comment/post_like가 하드 삭제돼도 남는 append-only 로그라서
@@ -255,7 +321,7 @@ async function first_activity(res) {
             .orderBy("u.id", "asc");
 
         let data = `
-            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a><br>
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
             <h1>첫 글 / 첫 반응 시각</h1>
             <table border="1">
                 <tr>
@@ -277,6 +343,153 @@ async function first_activity(res) {
         admin_html("첫 글 / 첫 반응 시각", data, res);
     } catch (error) {
         console.error("Error in first_activity function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
+// 어드민이 유저에게 메시지(1:1 또는 공지)를 보내고 읽음 현황을 보는 페이지.
+// 공지는 발송 시점에 대상 유저마다 한 행씩 insert해서, mention과 달리 "확인 여부"뿐 아니라
+// "확인 시각"까지 각자 추적할 수 있게 한다(admin_message.read_at, admin_message.js에서 갱신).
+async function admin_message_page(res) {
+    try {
+        // 같은 발송 건(group_id)을 하나로 묶어서 제목/발송시각/대상수/읽은수를 보여줌
+        const groups = await knex("admin_message as m")
+            .select(
+                "m.group_id",
+                knex.raw("MIN(m.title) as title"),
+                knex.raw("MIN(m.created_at) as created_at"),
+                knex.raw("COUNT(*) as total_count"),
+                knex.raw("SUM(m.is_read) as read_count")
+            )
+            .groupBy("m.group_id")
+            .orderBy("created_at", "desc");
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <h1>어드민 메시지 보내기</h1>
+            <form method="post" action="/admin/admin_message">
+                <label>대상 (profile의 id를 쉼표로 구분 / 전체 발송은 "all"):</label><br>
+                <input type="text" name="target" style="width:400px" placeholder="wodud8148, nmixx 또는 all"/><br>
+                <label>제목:</label><br>
+                <input type="text" name="title" style="width:400px"/><br>
+                <label>내용:</label><br>
+                <textarea name="body" rows="4" style="width:400px"></textarea><br>
+                <input type="submit" value="보내기"/>
+            </form>
+
+            <h1>발송 현황</h1>
+            <table border="1">
+                <tr>
+                    <td>발송 시각</td>
+                    <td>제목</td>
+                    <td>대상 수</td>
+                    <td>읽은 수</td>
+                </tr>
+        `;
+        for (const g of groups) {
+            data += `
+                <tr>
+                    <td>${g.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
+                    <td>${g.title}</td>
+                    <td>${g.total_count}</td>
+                    <td>${g.read_count}</td>
+                </tr>
+            `;
+        }
+        data += `</table>`;
+        admin_html("어드민 메시지", data, res);
+    } catch (error) {
+        console.error("Error in admin_message_page function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
+async function send_admin_message(req, res) {
+    try {
+        const target = (req.body.target || "").trim();
+        const title = (req.body.title || "").trim();
+        const body = (req.body.body || "").trim();
+
+        if (!target || !title || !body) {
+            return res.end("<h1>대상/제목/내용을 모두 입력해주세요.</h1>");
+        }
+
+        let targetIds;
+        if (target.toLowerCase() === "all") {
+            // 탈퇴하지 않은 유저 전체
+            const rows = await knex("user").select("id").whereNull("deletetime");
+            targetIds = rows.map((r) => r.id);
+        } else {
+            // profile.user_id(표시용 아이디) 기준으로 입력받아 내부 id로 변환
+            const displayIds = target.split(",").map((s) => s.trim()).filter(Boolean);
+            const rows = await knex("profile as p")
+                .join("user as u", "u.id", "p.id")
+                .whereIn("p.user_id", displayIds)
+                .whereNull("u.deletetime")
+                .select("u.id");
+            targetIds = rows.map((r) => r.id);
+        }
+
+        if (targetIds.length === 0) {
+            return res.end("<h1>대상 유저를 찾지 못했습니다. id를 다시 확인해주세요.</h1>");
+        }
+
+        const group_id = crypto.randomUUID();
+        const insertRows = targetIds.map((user_id) => ({ group_id, user_id, title, body }));
+        await knex("admin_message").insert(insertRows);
+
+        res.redirect("/admin/admin_message");
+    } catch (error) {
+        console.error("Error in send_admin_message function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
+// 일별 유저별 앱 실행 횟수. app_launch_event는 프론트가 포그라운드 진입마다 보내는
+// 별도 이벤트라서, login_log(재로그인/토큰갱신 시점)와 달리 토큰이 살아있는 채로
+// 다시 연 경우까지 잡힘. 세션처럼 간격으로 묶지 않고 이벤트 자체를 그대로 카운트함
+// (몇 번 "열었는지"가 목적이라 30분 이내 여러 번 열어도 각각 카운트하는 게 맞음).
+async function app_launch_count(res) {
+    try {
+        const rows = await knex("app_launch_event as e")
+            .join("user as u", "u.id", "e.user_id")
+            .leftJoin("profile as p", "p.id", "u.id")
+            .select(
+                "e.user_id as id",
+                "p.user_id as profile_user_id",
+                knex.raw("DATE(e.created_at) as log_date"),
+                knex.raw("COUNT(*) as launch_count")
+            )
+            .groupBy("e.user_id", "p.user_id", knex.raw("DATE(e.created_at)"))
+            .orderBy("e.user_id", "asc")
+            .orderBy("log_date", "asc");
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a><br>
+            <h1>일별 유저별 앱 실행 횟수</h1>
+            <table border="1">
+                <tr>
+                    <td>id</td>
+                    <td>날짜</td>
+                    <td>실행 횟수</td>
+                </tr>
+        `;
+        for (const row of rows) {
+            const dateStr = row.log_date instanceof Date
+                ? row.log_date.toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })
+                : row.log_date;
+            data += `
+                <tr>
+                    <td>${row.profile_user_id ?? row.id}</td>
+                    <td>${dateStr}</td>
+                    <td>${row.launch_count}</td>
+                </tr>
+            `;
+        }
+        data += `</table>`;
+        admin_html("일별 유저별 앱 실행 횟수", data, res);
+    } catch (error) {
+        console.error("Error in app_launch_count function:", error);
         res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
     }
 }
@@ -333,5 +546,17 @@ router.get("/post", (req, res) => {
 });
 router.get("/first_activity", (req, res) => {
     check_login(first_activity(res), req, res);
+});
+router.get("/session_count", (req, res) => {
+    check_login(session_count(res), req, res);
+});
+router.get("/admin_message", (req, res) => {
+    check_login(admin_message_page(res), req, res);
+});
+router.post("/admin_message", (req, res) => {
+    check_login(send_admin_message(req, res), req, res);
+});
+router.get("/app_launch_count", (req, res) => {
+    check_login(app_launch_count(res), req, res);
 });
 module.exports = router;
