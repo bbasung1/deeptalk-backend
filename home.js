@@ -73,6 +73,7 @@ async function resort_post(type, ourid, page) {
         .where("blocked_user_id", ourid)
         .andWhere("type", 0);
     })
+    .whereNull("p.deleted_at")
     // 기획서 8장: 후보 게시글 수집 범위 (최근 7일 + 팔로우/팔로워 + 과거 상호작용 + 본인 글)
     .whereRaw(buildCandidateWhereRaw("p", ourid))
     // select 내에서 knex.raw()를 사용하여 계산된 컬럼에 별칭(Alias)을 지정합니다.

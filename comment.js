@@ -52,9 +52,7 @@ router.post("/", upload.array("files", 6), async (req, res) => {
 
         const post = await knex(targetTable)
             .where(postColumn, post_num)
-            .modify((qb) => {
-                if (targetTable === "talk" || targetTable === "comment") qb.whereNull("deleted_at");
-            })
+            .whereNull("deleted_at")
             .select(knex.raw("1"))
             .first();
 
@@ -201,9 +199,7 @@ router.get("/", async (req, res) => {
         //  게시글 존재 여부 확인
         const post = await knex(targetTable)
             .where(postColumn, post_num)
-            .modify((qb) => {
-                if (targetTable === "talk" || targetTable === "comment") qb.whereNull("deleted_at");
-            })
+            .whereNull("deleted_at")
             .select("comment")
             .first();
 

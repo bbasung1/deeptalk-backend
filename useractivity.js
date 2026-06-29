@@ -44,6 +44,7 @@ router.post("/", async (req, res) => {
             const think = await knex('think')
                 .where('writer_id', target_id)
                 .whereNotIn('writer_id', blockedIds)
+                .whereNull('think.deleted_at')
                 .leftJoin("profile", "think.writer_id", "profile.id")
                 .select('think.*', ...islikeandbookmark(requester_id, "think", 1), ...iscommentandquote(requester_id, "think", 1, "is_comment", "think"), "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image")
                 .limit(10).offset(page * 10);
@@ -136,6 +137,7 @@ router.post("/quote_list", async (req, res) => {
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where("p.writer_id", requester_id)
             .whereNotNull("p.quote")
+            .whereNull("p.deleted_at")
             .modify(quoteBlockFilter)
             .select(
                 "p.think_num", "p.writer_id", "p.header", "p.subject",

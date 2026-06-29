@@ -173,9 +173,9 @@ async function logLogin(userId, platform) {
     }
 }
 
-// talk/comment/post_like는 소프트 삭제(deleted_at)로 전환됐지만, think는 여전히 하드 삭제(.del())되고
-// 과거 하드 삭제 데이터도 복구되지 않으므로, 삭제 후에도 "첫 글/첫 반응 시각" 같은 집계가 가능하도록
-// 별도 append-only 로그에 기록한다.
+// talk/think/comment/post_like 모두 소프트 삭제(deleted_at)로 전환됐지만, 이 전환 이전에 이미
+// 하드 삭제된 과거 데이터는 복구되지 않으므로, 삭제 후에도 "첫 글/첫 반응 시각" 같은 집계가
+// 가능하도록 별도 append-only 로그에 기록한다.
 // 게시물 본문 등 민감한 내용은 절대 넘기지 말 것 (content_event_log에는 종류/시각만 저장).
 const CONTENT_EVENT_TYPES = new Set(["post_talk", "post_think", "comment", "like"]);
 
@@ -278,7 +278,7 @@ const iscommentandquote = (id, type_name, type_code, comment_alias = "is_comment
         knex.raw(
             `(
                 EXISTS(SELECT 1 FROM talk AS f5 WHERE f5.writer_id = ? AND f5.quote = ${outerCol} AND f5.quote_type = ? AND f5.deleted_at IS NULL)
-                OR EXISTS(SELECT 1 FROM think AS f6 WHERE f6.writer_id = ? AND f6.quote = ${outerCol} AND f6.quote_type = ?)
+                OR EXISTS(SELECT 1 FROM think AS f6 WHERE f6.writer_id = ? AND f6.quote = ${outerCol} AND f6.quote_type = ? AND f6.deleted_at IS NULL)
                 OR EXISTS(
                     SELECT 1 FROM comment AS f7
                     INNER JOIN profile AS pf7 ON pf7.user_id = f7.user_id
