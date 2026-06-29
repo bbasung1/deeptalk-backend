@@ -14,7 +14,10 @@ router.use(
     )
 );
 
-// 내가 받은 어드민 메시지 조회 (인증 필요, 본인 것만 조회 가능)
+// 내가 받은 어드민 메시지 조회 (인증 필요, 나에게 온 것만 조회 가능).
+// admin_messages(발송 내용)와 admin_message_reads(내 읽음 기록)를 분리해서 저장하므로
+// LEFT JOIN으로 합쳐서 is_read/read_at을 계산함 (읽지 않았으면 admin_message_reads에 행이 없음).
+// "나에게 온 메시지" = 전체 공지(target_type=all) 또는 나를 지정한 개별 메시지(target_user_id=내 id).
 router.get("/", async (req, res) => {
     const my_id = await define_id(req.headers.authorization, res);
     if (res.headersSent) return;
@@ -25,10 +28,22 @@ router.get("/", async (req, res) => {
     const page = Math.max(parseInt(req.query.page) || 0, 0);
 
     try {
-        const messages = await knex("admin_message")
-            .where("user_id", my_id)
-            .select("id", "title", "body", "created_at", "is_read", "read_at")
-            .orderBy("created_at", "desc")
+        const messages = await knex("admin_messages as m")
+            .leftJoin("admin_message_reads as r", function () {
+                this.on("r.message_id", "=", "m.id").andOn("r.user_id", "=", knex.raw("?", [my_id]));
+            })
+            .where(function () {
+                this.where("m.target_type", "all").orWhere({ "m.target_type": "individual", "m.target_user_id": my_id });
+            })
+            .select(
+                "m.id",
+                "m.title",
+                "m.content as body",
+                "m.sent_at as created_at",
+                knex.raw("(r.id IS NOT NULL) AS is_read"),
+                "r.read_at"
+            )
+            .orderBy("m.sent_at", "desc")
             .limit(20)
             .offset(page * 20);
 
@@ -39,7 +54,9 @@ router.get("/", async (req, res) => {
     }
 });
 
-// 어드민 메시지 읽음 처리 (본인 소유의 메시지만 처리 가능, read_at은 최초 1회만 기록)
+// 어드민 메시지 읽음 처리 (나에게 온 메시지만 처리 가능).
+// admin_message_reads에는 (user_id, message_id) UNIQUE가 걸려 있어서, 이미 읽은 메시지를
+// 다시 읽음 처리해도 두 번째부터는 INSERT IGNORE로 조용히 무시됨 (read_at은 최초 시각 유지, 멱등).
 router.patch("/:message_id/read", async (req, res) => {
     const my_id = await define_id(req.headers.authorization, res);
     if (res.headersSent) return;
@@ -53,22 +70,23 @@ router.patch("/:message_id/read", async (req, res) => {
     }
 
     try {
-        // 존재 여부와 소유권을 함께 확인 (다른 사람의 메시지를 추측해 변경하지 못하도록 동일한 404로 응답)
-        // is_read=0인 행만 갱신해서 read_at이 이후 호출로 덮어씌워지지 않게 함.
-        const updated = await knex("admin_message")
-            .where({ id: message_id, user_id: my_id, is_read: 0 })
-            .update({ is_read: 1, read_at: knex.fn.now() });
+        // 이 메시지가 실제로 나에게 온 메시지인지 확인 (다른 사람 대상 메시지를 추측해
+        // 읽음 처리하지 못하도록 동일한 404로 응답).
+        const message = await knex("admin_messages")
+            .where("id", message_id)
+            .where(function () {
+                this.where("target_type", "all").orWhere({ target_type: "individual", target_user_id: my_id });
+            })
+            .first();
 
-        if (updated === 0) {
-            const exists = await knex("admin_message")
-                .where({ id: message_id, user_id: my_id })
-                .first();
-            if (!exists) {
-                return res.status(404).json({ success: false, message: "메시지를 찾을 수 없습니다." });
-            }
-            // 이미 읽음 처리된 경우도 성공으로 응답 (멱등)
-            return res.json({ success: true });
+        if (!message) {
+            return res.status(404).json({ success: false, message: "메시지를 찾을 수 없습니다." });
         }
+
+        await knex("admin_message_reads")
+            .insert({ user_id: my_id, message_id: message_id })
+            .onConflict(["user_id", "message_id"])
+            .ignore();
 
         return res.json({ success: true });
     } catch (err) {
