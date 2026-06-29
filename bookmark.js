@@ -17,10 +17,11 @@ router.use(
 
 router.post("/:id", async (req, res) => {
     const ourid = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     if (!ourid) {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }
-    const [dupcheck] = await knex("bookmark").select("*").where({ type: req.body.type, user_id: ourid, post_id: req.params.id })
+    const [dupcheck] = await knex("bookmark").select("*").where({ type: req.body.type, user_id: ourid, post_id: req.params.id }).whereNull("deleted_at")
     console.log(dupcheck);
     const trx = await knex.transaction();
     const type = req.body.type == 0 ? "talk" : "think";
@@ -29,7 +30,8 @@ router.post("/:id", async (req, res) => {
     console.log(dupcheck);
     if (dupcheck != undefined) {
         try {
-            await trx("bookmark").where({ type: req.body.type, post_id: req.params.id, user_id: ourid }).del();
+            // 하드 삭제(.del()) 대신 deleted_at을 채우는 소프트 삭제로 전환 (북마크 이력 보존).
+            await trx("bookmark").where({ type: req.body.type, post_id: req.params.id, user_id: ourid }).whereNull("deleted_at").update({ deleted_at: knex.fn.now() });
             await trx(type).decrement("mylist", 1).where(num_name, req.params.id);
             await trx.commit();
             const output = trx(type).select("mylist").where(num_name, req.params.id).first();
@@ -55,6 +57,7 @@ router.post("/:id", async (req, res) => {
 
 router.get("/list", async (req, res) => {
     const ourid = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     if (!ourid) {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }
@@ -68,7 +71,7 @@ router.get("/list", async (req, res) => {
         .leftJoin("profile", `${pt_type_name}.writer_id`, "profile.id")
         .select(`${pt_type_name}.*`, ...islikeandbookmark(ourid, pt_type_name, pt_type_bool), ...iscommentandquote(ourid, pt_type_name, pt_type_bool, "is_comment", pt_type_name), "profile.nickname", "profile.image as profile_image")
         .whereIn(num_name, function () {
-            this.select("post_id").from("bookmark").where({ type: pt_type_bool, user_id: ourid });
+            this.select("post_id").from("bookmark").where({ type: pt_type_bool, user_id: ourid }).whereNull("deleted_at");
         });
     return res.json(await buildPostResponse(list, ourid));
 });

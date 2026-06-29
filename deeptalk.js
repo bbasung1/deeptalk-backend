@@ -46,6 +46,20 @@ app.use("/follow", require("./follow.js"));
 app.use("/report", require("./report.js"));
 // app.use("/test", require("./test.js"));
 app.use("/show", require("./show.js"));
+const { getResizedFilePath, ALLOWED_WIDTHS } = require("./utils/imageResize.js");
+app.get("/files/*", async (req, res, next) => {
+    const w = parseInt(req.query.w, 10);
+    if (!ALLOWED_WIDTHS.includes(w)) return next();
+
+    try {
+        const relPath = decodeURIComponent(req.params[0]);
+        const filePath = await getResizedFilePath(relPath, w);
+        res.sendFile(filePath, (err) => { if (err) next(err); });
+    } catch (err) {
+        if (err.code === "ENOENT") return next();
+        next(err);
+    }
+});
 app.use("/files", express.static(process.env.FILE_DIR));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerFile));
 app.use("/vote", require("./vote.js"));

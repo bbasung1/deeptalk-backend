@@ -44,7 +44,14 @@ router.post("/info", async (req, res) => {
       })
       .first();
     if (blocked) {
-      return res.status(403).json({ msg: "프로필을 조회할 수 없습니다.", code: "4031" });
+      return res.json({
+        id: data.id,
+        user_id: data.user_id,
+        nickname: data.nickname,
+        status_message: data.status_message,
+        image: data.image,
+        blocked: true,
+      });
     }
   }
 
@@ -316,6 +323,7 @@ router.post("/hide_follow_list", async (req, res) => {
 
 router.put("/mail", async (req, res) => {
   const id = await define_id(req.headers.authorization, res);
+  if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
   console.log(id);
   if (id == null) {
     return res.status(403).json({
@@ -333,6 +341,8 @@ router.put("/mail", async (req, res) => {
 
 router.get("/account_info", async (req, res) => {
   const id = await define_id(req.headers.authorization, res);
+  if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
+  if (!id) return res.status(401).json({ success: false, message: "인증이 필요합니다." });
   const [info] = await knex("user").select("user.email", "profile.user_id", "profile.nickname").leftJoin("profile", "user.id", "profile.id").where("user.id", id);
   console.log(info);
   res.json(info);

@@ -121,6 +121,7 @@ async function sendMentionNotification({ mentionedIds, actorNickname }) {
 
 router.post("/token", async (req, res) => {
     const our_id = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     if (!our_id) {
         return res.status(404).json({ success: 0, message: "authorization이 유효하지 않습니다." });
     }

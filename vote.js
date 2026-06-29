@@ -17,6 +17,7 @@ router.use(
 
 router.get("/:id", async (req, res) => {
     const our_id = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     let [already_vote] = await knex("vote_count").select("*").where({ "vote_num": req.params.id, "our_id": our_id })
     let [vote_info] = await knex("vote").select("*").where("vote_num", req.params.id);
     if (already_vote == undefined || new Date(vote_info.end_date) < new Date()) {
@@ -42,6 +43,7 @@ router.get("/:id", async (req, res) => {
 })
 router.post("/:id", async (req, res) => {
     const our_id = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     const trx = await knex.transaction();
     try {
         let [already_vote] = await trx("vote_count").select("*").where({ "vote_num": req.params.id, "our_id": our_id })

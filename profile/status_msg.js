@@ -7,7 +7,9 @@ const knex = require("../knex.js");
 router.use(express.json());
 
 router.put("/", async (req, res) => {
-    ourid = await define_id(req.headers.authorization, res);
+    const ourid = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
+    if (!ourid) return res.status(401).json({ success: 0, msg: "인증이 필요합니다" });
     const msg = req.body.msg;
     try {
         await knex("profile").update({ "status_message": msg }).where("id", ourid);

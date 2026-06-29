@@ -108,7 +108,7 @@ router.get("/follower/:user_id", async (req, res) => {
 router.get("/like/:type/:post_id", async (req, res) => {
     const type = req.params.type == "free" ? 0 : (req.params.type == "serious" ? 1 : 2);
     const page = req.query.page || 0;
-    const list = await knex("post_like").leftJoin("profile", "post_like.user_id", "profile.id").where({ "post_like.type": type, "post_like.post_id": req.params.post_id }).select("profile.nickname", "profile.user_id", "profile.image").limit(10)
+    const list = await knex("post_like").leftJoin("profile", "post_like.user_id", "profile.id").where({ "post_like.type": type, "post_like.post_id": req.params.post_id }).whereNull("post_like.deleted_at").select("profile.nickname", "profile.user_id", "profile.image").limit(10)
         .offset(page * 10);
     res.json(list);
 
@@ -132,7 +132,7 @@ router.get("/comment/:comment_id", async (req, res) => {
             "p.writer_id as writer_profile_id",
             ...iscommentandquote(requester_id, "comment", 2, "is_reply", "p")
         )
-        .where("p.comment_num", req.params.comment_id).first();
+        .where("p.comment_num", req.params.comment_id).whereNull("p.deleted_at").first();
 
     if (content) {
         if (requester_id) {
@@ -164,22 +164,26 @@ router.get("/quotes/:type/:post_id", async (req, res) => {
     let userId = null;
     if (req.headers.authorization) {
         userId = await define_id(req.headers.authorization, res);
+        if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     }
 
     const [list1, list2, list3] = await Promise.all([
         knex("talk as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where({ quote_type: type, quote: req.params.post_id, 'p.draft': 0 })
+            .whereNull("p.deleted_at")
             .select('p.*', "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "talk", 0), ...iscommentandquote(userId, "talk", 0, "is_comment", "p"))
             .limit(10).offset(page * 10),
         knex("think as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where({ quote_type: type, quote: req.params.post_id, 'p.draft': 0 })
+            .whereNull("p.deleted_at")
             .select('p.*', "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "think", 1), ...iscommentandquote(userId, "think", 1, "is_comment", "p"))
             .limit(10).offset(page * 10),
         knex("comment as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where({ quote_type: type, quote: req.params.post_id })
+            .whereNull("p.deleted_at")
             .select('p.*', "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "comment", 2), ...iscommentandquote(userId, "comment", 2, "is_reply", "p"))
             .limit(10).offset(page * 10),
     ]);

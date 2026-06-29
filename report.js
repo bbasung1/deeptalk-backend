@@ -39,8 +39,8 @@ router.post("/", async (req, res) => {
     if (!category || !report_type) {
       return res.status(400).json({ success: 0, msg: "필수 항목이 누락되었습니다." });
     }
-
-    if (!["오류가 있어요","유저를 신고하고 싶어요","클럽에게 피드백 하고 싶어요","기타"].includes(report_type)&&!["think", "talk", "comment","user"].includes(post_type)) {
+    const none_post_report_types=["오류가 있어요","유저를 신고하고 싶어요","클럽에게 피드백 하고 싶어요","기타","처분에 대해 이의를 제기하고 싶어요"]
+    if (!none_post_report_types.includes(report_type)&&!["think", "talk", "comment","user"].includes(post_type)) {
       return res.status(400).json({ success: 0, msg: "유효하지 않은 post_type 값입니다." });
     }
 
@@ -64,7 +64,7 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ success: 0, msg: "해당 게시글을 찾을 수 없습니다." });
     }
 let reported_id;
-if(!["오류가 있어요","유저를 신고하고 싶어요","클럽에게 피드백 하고 싶어요","기타"].includes(report_type)){
+if(!none_post_report_types.includes(report_type)){
     reported_id = reportedUser.writer_id;
 
     // 4️⃣ 중복 신고 방지 (reporter_id + post_id + post_type)

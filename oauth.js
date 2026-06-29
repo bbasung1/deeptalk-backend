@@ -344,6 +344,8 @@ router.put("/signup", async (req, res) => {
 
 router.delete("/account", async (req, res) => {
   let ourid = await define_id(req.headers.authorization, res);
+  if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
+  if (!ourid) return res.status(401).json({ success: 0, message: "인증이 필요합니다." });
   console.log(req.body);
   console.log(ourid);
   const reason = req.body.reason;

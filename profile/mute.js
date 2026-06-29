@@ -44,6 +44,7 @@ router.delete("/", async (req, res) => {
 
 router.post("/list", async (req, res) => {
     const ourid = await define_id(req.headers.authorization, res);
+    if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     if (!ourid) {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }

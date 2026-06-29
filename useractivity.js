@@ -34,6 +34,7 @@ router.post("/", async (req, res) => {
             const talk = await knex('talk')
                 .where('writer_id', target_id)
                 .whereNotIn('writer_id', blockedIds)
+                .whereNull('talk.deleted_at')
                 .leftJoin("profile", "talk.writer_id", "profile.id")
                 .select('talk.*', ...islikeandbookmark(requester_id, "talk", 0), ...iscommentandquote(requester_id, "talk", 0, "is_comment", "talk"), "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image")
                 .limit(10).offset(page * 10);
@@ -43,6 +44,7 @@ router.post("/", async (req, res) => {
             const think = await knex('think')
                 .where('writer_id', target_id)
                 .whereNotIn('writer_id', blockedIds)
+                .whereNull('think.deleted_at')
                 .leftJoin("profile", "think.writer_id", "profile.id")
                 .select('think.*', ...islikeandbookmark(requester_id, "think", 1), ...iscommentandquote(requester_id, "think", 1, "is_comment", "think"), "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image")
                 .limit(10).offset(page * 10);
@@ -53,6 +55,7 @@ router.post("/", async (req, res) => {
                 .where('comment.writer_id', target_id)
                 .leftJoin("profile", "comment.writer_id", "profile.id")
                 .whereNotIn('comment.writer_id', blockedIds)
+                .whereNull('comment.deleted_at')
                 .select("comment.*", ...islikeandbookmark(requester_id, "comment", 2), ...iscommentandquote(requester_id, "comment", 2, "is_reply", "comment"), "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image")
                 .limit(10).offset(page * 10);
             const serializedComments = comments.map(c => ({
@@ -118,6 +121,7 @@ router.post("/quote_list", async (req, res) => {
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where("p.writer_id", requester_id)
             .whereNotNull("p.quote")
+            .whereNull("p.deleted_at")
             .modify(quoteBlockFilter)
             .select(
                 "p.talk_num", "p.writer_id", "p.header", "p.subject",
@@ -133,6 +137,7 @@ router.post("/quote_list", async (req, res) => {
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where("p.writer_id", requester_id)
             .whereNotNull("p.quote")
+            .whereNull("p.deleted_at")
             .modify(quoteBlockFilter)
             .select(
                 "p.think_num", "p.writer_id", "p.header", "p.subject",
