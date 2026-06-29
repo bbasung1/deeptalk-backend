@@ -432,7 +432,7 @@ router.post("/login", async (req, res) => {
               .where("kakao_id", sub)
               .update(insertdata)
               .then(async () => {
-                await logLogin(tokendata[0].id, "kakao");
+                await logLogin(tokendata[0].id, "kakao", req.body.device_type);
                 res.json(senddata);
               });
           })
@@ -481,7 +481,7 @@ router.post("/login", async (req, res) => {
               .where("apple_id", sub)
               .update(insertdata)
               .then(async () => {
-                await logLogin(tokendata[0].id, "apple");
+                await logLogin(tokendata[0].id, "apple", req.body.device_type);
                 res.json(senddata);
               });
           })
@@ -510,7 +510,7 @@ router.post("/login", async (req, res) => {
       willdelete = 1;
       deletetime = is_delete.deletetime;
     }
-    await logLogin(sub, platform);
+    await logLogin(sub, platform, req.body.device_type);
     res.json({ id_token: token, willdelete, deletetime });
   } else if (iss == "https://accounts.google.com") {
     const [id] = await knex.select("google_access_code", "google_refresh_code", "id", "deletetime").from("user").where("google_id", sub);
@@ -525,7 +525,7 @@ router.post("/login", async (req, res) => {
       deletetime = id.deletetime;
     }
     const token = jwt.sign({ email: decodetoken.email, sub: id.id }, process.env.JWT_SECRET, { expiresIn: '24h', issuer: 'jamdeeptalk.com' });
-    await logLogin(id.id, "google");
+    await logLogin(id.id, "google", req.body.device_type);
     return res.json({ id_token: token, willdelete, deletetime });
   }
 });

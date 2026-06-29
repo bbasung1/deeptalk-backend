@@ -68,6 +68,7 @@ app.use("/mention", require("./mention.js"));
 app.use("/onboarding", require("./onboarding.js"));
 app.use("/admin_message", require("./admin_message.js"));
 app.use("/app_launch", require("./app_launch.js"));
+app.use("/session", require("./sessions.js"));
 morgan.token("status", function (req, res) {
     let color;
     if (res.statusCode == 404) color = "\x1B[44m";
