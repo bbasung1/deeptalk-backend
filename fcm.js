@@ -16,13 +16,10 @@ router.use(
 );
 
 if (!admin.apps.length) {
+    var serviceAccount = require("./cozyhumanclub-firebase-adminsdk-fbsvc-bd5923458a.json");
     admin.initializeApp({
-        credential: admin.credential.cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-        }),
-    });
+  credential: admin.credential.cert(serviceAccount)
+});
 }
 
 async function sendPostNotification(writer_id, nickname, mode) {
