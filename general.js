@@ -189,7 +189,21 @@ async function logLogin(userId, platform, deviceType) {
         console.error("logLogin failed:", err);
     }
 }
-
+// DAU/MAU 계산용 일별 접속 기록. (user_id, access_date) UNIQUE라서 같은 날 여러 번 호출돼도
+// INSERT IGNORE로 조용히 무시됨 — 요청마다 매번 새 행이 쌓이지 않음.
+// define_id(거의 모든 인증 라우트의 공통 진입점)에서 인증 성공 시점에 fire-and-forget으로 호출.
+// 분석용 데이터라 실패해도 요청 자체를 막으면 안 되므로 에러는 내부에서 흡수.
+async function logUserAccess(userId) {
+    if (!userId) return;
+    try {
+        await knex("user_access_logs")
+            .insert({ user_id: userId, access_date: knex.raw("CURDATE()") })
+            .onConflict(["user_id", "access_date"])
+            .ignore();
+    } catch (err) {
+        console.error("logUserAccess failed:", err);
+    }
+}
 // talk/think/comment/post_like 모두 소프트 삭제(deleted_at)로 전환됐지만, 이 전환 이전에 이미
 // 하드 삭제된 과거 데이터는 복구되지 않으므로, 삭제 후에도 "첫 글/첫 반응 시각" 같은 집계가
 // 가능하도록 별도 append-only 로그에 기록한다.
