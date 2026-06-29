@@ -44,6 +44,7 @@ app.use("/like", require("./like.js"));
 app.use("/mylist", require("./bookmark.js"));
 app.use("/follow", require("./follow.js"));
 app.use("/report", require("./report.js"));
+app.use("/moderation", require("./moderation.js"));
 // app.use("/test", require("./test.js"));
 app.use("/show", require("./show.js"));
 const { getResizedFilePath, ALLOWED_WIDTHS } = require("./utils/imageResize.js");

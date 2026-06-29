@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
 const { define_id,user_id_to_id } = require("./general.js");
+const { mapPostTypeToTarget, processReportForModeration } = require("./moderation.js");
 
 const { stream } = require("./log.js");
 const morgan = require("morgan");
@@ -81,15 +82,32 @@ if(!none_post_report_types.includes(report_type)){
     post_type=null;
   }
 
-    // 5️⃣ 신고 DB 저장
-    await knex("report").insert({
-      reporter_id,
-      reported_id,
-      post_id,
-      post_type,
-      report_type,
-      reason,
-      category
+    // 5️⃣ 신고 DB 저장 + (게시글/계정 신고인 경우) moderation case 병합 및 스냅샷 캡처
+    // 둘 중 하나라도 실패하면 전체가 롤백되도록 트랜잭션으로 묶음.
+    const target = post_type ? mapPostTypeToTarget(post_type) : null;
+
+    await knex.transaction(async (trx) => {
+      const [new_report_id] = await trx("report").insert({
+        reporter_id,
+        reported_id,
+        post_id,
+        post_type,
+        report_type,
+        reason,
+        category,
+        target_type: target ? target.target_type : null,
+        target_subtype: target ? target.target_subtype : null,
+        target_id: target ? post_id : null,
+      });
+
+      if (target && post_id) {
+        try {
+          await processReportForModeration(trx, { report_id: new_report_id, post_type, target_id: post_id });
+        } catch (modErr) {
+          console.error("🚨 모더레이션 case 병합/스냅샷 처리 중 오류:", modErr);
+          throw modErr;
+        }
+      }
     });
 
     return res.status(201).json({ success: 1, msg: "신고가 접수되었습니다." });

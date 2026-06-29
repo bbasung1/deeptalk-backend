@@ -79,6 +79,10 @@ web_modules/
 .env.production.local
 .env.local
 
+# Firebase service account key (절대 커밋 금지)
+*firebase-adminsdk*.json
+serviceAccountKey.json
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache
