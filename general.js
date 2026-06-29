@@ -82,11 +82,6 @@ async function define_id(test_id, res) {
             res.status(httpcode).json(rest);
             return null;
         }
-        // DAU/MAU 집계용 일별 접속 기록. 거의 모든 인증 라우트가 이 함수를 통과하므로
-        // 여기서 한 번만 걸어두면 라우트마다 따로 호출할 필요가 없음.
-        // await 하지 않음 — 분석용 insert 때문에 응답이 느려지면 안 됨. 실패도 logUserAccess
-        // 내부에서 흡수하므로 여기서 별도 catch는 필요 없음.
-        logUserAccess(id);
     };
     return id;
 }
@@ -163,47 +158,21 @@ async function handleBlockAction(req, res, actionType) {
 // 리텐션 집계에서 가장 중요한 플랫폼 값이다.
 const LOGIN_PLATFORMS = new Set(["kakao", "apple", "google", "discord", "jamdeeptalk"]);
 
-// 노션 스펙(데이터 수집 가능 여부 문서)이 요구하는 디바이스 구분값.
-// 클라이언트가 안 보내거나 이 두 값이 아니면 그냥 NULL로 저장(필수값으로 막지 않음 —
-// 분석용 데이터 때문에 로그인/실행 자체가 막히면 안 됨).
-const DEVICE_TYPES = new Set(["ios", "android"]);
-function normalizeDeviceType(deviceType) {
-    return DEVICE_TYPES.has(deviceType) ? deviceType : null;
-}
-
-// 로그인 시각/플랫폼/디바이스 기록. 분석용 데이터일 뿐이라 실패해도 로그인 자체를 막으면 안 되므로
+// 로그인 시각/플랫폼 기록. 분석용 데이터일 뿐이라 실패해도 로그인 자체를 막으면 안 되므로
 // 호출하는 쪽에서 await 하더라도 에러가 위로 전파되지 않게 내부에서 흡수한다.
-// 토큰류는 절대 여기에 넘기지 말 것 (login_log 테이블에는 시각/플랫폼/디바이스 구분값만 저장).
-async function logLogin(userId, platform, deviceType) {
+// 토큰류는 절대 여기에 넘기지 말 것 (login_log 테이블에는 시각/플랫폼만 저장).
+async function logLogin(userId, platform) {
     if (!userId || !LOGIN_PLATFORMS.has(platform)) {
         console.error("logLogin: invalid args", { userId, platform });
         return;
     }
     try {
-        await knex("login_log").insert({
-            user_id: userId,
-            platform,
-            device_type: normalizeDeviceType(deviceType),
-        });
+        await knex("login_log").insert({ user_id: userId, platform });
     } catch (err) {
         console.error("logLogin failed:", err);
     }
 }
-// DAU/MAU 계산용 일별 접속 기록. (user_id, access_date) UNIQUE라서 같은 날 여러 번 호출돼도
-// INSERT IGNORE로 조용히 무시됨 — 요청마다 매번 새 행이 쌓이지 않음.
-// define_id(거의 모든 인증 라우트의 공통 진입점)에서 인증 성공 시점에 fire-and-forget으로 호출.
-// 분석용 데이터라 실패해도 요청 자체를 막으면 안 되므로 에러는 내부에서 흡수.
-async function logUserAccess(userId) {
-    if (!userId) return;
-    try {
-        await knex("user_access_logs")
-            .insert({ user_id: userId, access_date: knex.raw("CURDATE()") })
-            .onConflict(["user_id", "access_date"])
-            .ignore();
-    } catch (err) {
-        console.error("logUserAccess failed:", err);
-    }
-}
+
 // talk/think/comment/post_like 모두 소프트 삭제(deleted_at)로 전환됐지만, 이 전환 이전에 이미
 // 하드 삭제된 과거 데이터는 복구되지 않으므로, 삭제 후에도 "첫 글/첫 반응 시각" 같은 집계가
 // 가능하도록 별도 append-only 로그에 기록한다.
@@ -462,7 +431,6 @@ module.exports = {
     make_code,
     logLogin,
     logContentEvent,
-    normalizeDeviceType,
     add_nickname,
     id_to_user_id,
     user_id_to_id,

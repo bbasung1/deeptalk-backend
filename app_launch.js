@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
-const { define_id, normalizeDeviceType } = require("./general.js");
+const { define_id } = require("./general.js");
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -24,10 +24,7 @@ router.post("/", async (req, res) => {
     if (!id) return res.status(401).json({ success: 0, message: "인증이 필요합니다." });
 
     try {
-        await knex("app_launch_event").insert({
-            user_id: id,
-            device_type: normalizeDeviceType(req.body.device_type),
-        });
+        await knex("app_launch_event").insert({ user_id: id });
         return res.status(201).json({ success: 1, message: "기록되었습니다." });
     } catch (err) {
         console.error("app_launch_event insert failed:", err);
