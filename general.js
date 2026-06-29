@@ -270,7 +270,7 @@ const iscommentandquote = (id, type_name, type_code, comment_alias = "is_comment
             `EXISTS(
                 SELECT 1 FROM comment AS f4
                 INNER JOIN profile AS pf4 ON pf4.user_id = f4.user_id
-                WHERE pf4.id = ? AND f4.post_num = ${outerCol} AND f4.type = ?
+                WHERE pf4.id = ? AND f4.post_num = ${outerCol} AND f4.type = ? AND f4.draft = 0
             ) AS ${comment_alias}`,
             [id, type_code]
         ),
