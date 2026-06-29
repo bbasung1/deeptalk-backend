@@ -173,8 +173,9 @@ async function logLogin(userId, platform) {
     }
 }
 
-// talk/think/comment/post_like는 모두 하드 삭제(.del())되는 테이블이라, 삭제 후에도
-// "첫 글/첫 반응 시각" 같은 집계가 가능하도록 별도 append-only 로그에 기록한다.
+// talk/comment/post_like는 소프트 삭제(deleted_at)로 전환됐지만, think는 여전히 하드 삭제(.del())되고
+// 과거 하드 삭제 데이터도 복구되지 않으므로, 삭제 후에도 "첫 글/첫 반응 시각" 같은 집계가 가능하도록
+// 별도 append-only 로그에 기록한다.
 // 게시물 본문 등 민감한 내용은 절대 넘기지 말 것 (content_event_log에는 종류/시각만 저장).
 const CONTENT_EVENT_TYPES = new Set(["post_talk", "post_think", "comment", "like"]);
 
@@ -231,11 +232,11 @@ async function user_id_to_id(user_id) {
 
 const islikeandbookmark = (id, type_name, type_code) => [
     knex.raw(
-        `EXISTS(SELECT 1 FROM post_like AS f2 WHERE f2.user_id = ? AND f2.post_id = ${type_name}_num AND f2.type = ?) AS is_like`,
+        `EXISTS(SELECT 1 FROM post_like AS f2 WHERE f2.user_id = ? AND f2.post_id = ${type_name}_num AND f2.type = ? AND f2.deleted_at IS NULL) AS is_like`,
         [id, type_code]
     ),
     knex.raw(
-        `EXISTS(SELECT 1 FROM bookmark AS f3 WHERE f3.user_id = ? AND f3.post_id = ${type_name}_num AND f3.type = ?) AS is_bookmark`,
+        `EXISTS(SELECT 1 FROM bookmark AS f3 WHERE f3.user_id = ? AND f3.post_id = ${type_name}_num AND f3.type = ? AND f3.deleted_at IS NULL) AS is_bookmark`,
         [id, type_code]
     )
 ];
@@ -270,18 +271,18 @@ const iscommentandquote = (id, type_name, type_code, comment_alias = "is_comment
             `EXISTS(
                 SELECT 1 FROM comment AS f4
                 INNER JOIN profile AS pf4 ON pf4.user_id = f4.user_id
-                WHERE pf4.id = ? AND f4.post_num = ${outerCol} AND f4.type = ? AND f4.draft = 0
+                WHERE pf4.id = ? AND f4.post_num = ${outerCol} AND f4.type = ? AND f4.draft = 0  AND f4.deleted_at IS NULL
             ) AS ${comment_alias}`,
             [id, type_code]
         ),
         knex.raw(
             `(
-                EXISTS(SELECT 1 FROM talk AS f5 WHERE f5.writer_id = ? AND f5.quote = ${outerCol} AND f5.quote_type = ?)
+                EXISTS(SELECT 1 FROM talk AS f5 WHERE f5.writer_id = ? AND f5.quote = ${outerCol} AND f5.quote_type = ? AND f5.deleted_at IS NULL)
                 OR EXISTS(SELECT 1 FROM think AS f6 WHERE f6.writer_id = ? AND f6.quote = ${outerCol} AND f6.quote_type = ?)
                 OR EXISTS(
                     SELECT 1 FROM comment AS f7
                     INNER JOIN profile AS pf7 ON pf7.user_id = f7.user_id
-                    WHERE pf7.id = ? AND f7.quote = ${outerCol} AND f7.quote_type = ?
+                    WHERE pf7.id = ? AND f7.quote = ${outerCol} AND f7.quote_type = ? AND f7.deleted_at IS NULL
                 )
             ) AS is_quote`,
             [id, type_code, id, type_code, id, type_code]

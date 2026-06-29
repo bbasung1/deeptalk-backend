@@ -52,6 +52,9 @@ router.post("/", upload.array("files", 6), async (req, res) => {
 
         const post = await knex(targetTable)
             .where(postColumn, post_num)
+            .modify((qb) => {
+                if (targetTable === "talk" || targetTable === "comment") qb.whereNull("deleted_at");
+            })
             .select(knex.raw("1"))
             .first();
 
@@ -198,6 +201,9 @@ router.get("/", async (req, res) => {
         //  게시글 존재 여부 확인
         const post = await knex(targetTable)
             .where(postColumn, post_num)
+            .modify((qb) => {
+                if (targetTable === "talk" || targetTable === "comment") qb.whereNull("deleted_at");
+            })
             .select("comment")
             .first();
 
@@ -242,7 +248,8 @@ router.get("/", async (req, res) => {
                 ...islikeandbookmark(id, "comment", 2), // 가상의 Column
                 ...iscommentandquote(id, "comment", 2, "is_reply", "p")
             )
-            .where({ type, post_num });
+            .where({ type, post_num })
+            .whereNull("p.deleted_at");
 
         //  정렬 조건 추가
         if (sort === "popular") {
@@ -325,6 +332,7 @@ router.get("/:comment_id", async (req, res) => {
                 ...iscommentandquote(id, "comment", 2, "is_reply", "p")
             )
             .where("comment_num", comment_id)
+            .whereNull("p.deleted_at")
             .first();
 
         if (!comment) {
@@ -370,7 +378,7 @@ router.patch("/:comment_id", upload.array("files", 6), async (req, res) => {
 
     const trx = await knex.transaction();
     try {
-        const comment = await trx("comment").where("comment_num", comment_id).first();
+        const comment = await trx("comment").where("comment_num", comment_id).whereNull("deleted_at").first();
         if (!comment) {
             await trx.rollback();
             return res.status(404).json({ success: false, message: "댓글을 찾을 수 없습니다." });
@@ -503,7 +511,7 @@ router.patch("/:comment_id", upload.array("files", 6), async (req, res) => {
 router.delete("/:comment_id", async (req, res) => {
     const id = await define_id(req.headers.authorization, res);
     if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
-    const comment_data = await knex("comment").select("writer_id", "type", "post_num", "draft").where("comment_num", req.params.comment_id).first();
+    const comment_data = await knex("comment").select("writer_id", "type", "post_num", "draft").where("comment_num", req.params.comment_id).whereNull("deleted_at").first();
     if (!comment_data) {
         return res.status(404).json({ "msg": "댓글을 찾을 수 없습니다", "success": 0 });
     }
@@ -513,7 +521,8 @@ router.delete("/:comment_id", async (req, res) => {
     try {
         const TargetTable = comment_data.type === 0 ? "talk" : "think";
         const postColumn = comment_data.type === 0 ? "talk_num" : "think_num";
-        await knex("comment").where("comment_num", req.params.comment_id).delete();
+        // 하드 삭제(.delete()) 대신 deleted_at을 채우는 소프트 삭제로 전환.
+        await knex("comment").where("comment_num", req.params.comment_id).update({ deleted_at: knex.fn.now() });
         if (comment_data.draft === 0) {
             await knex(TargetTable).where(postColumn, comment_data.post_num).decrement("comment", 1);
         }
@@ -595,6 +604,7 @@ router.post("/list", async (req, res) => {
                 ...islikeandbookmark(requester_id, "comment", 2),
                 ...iscommentandquote(requester_id, "comment", 2, "is_reply", "c")
             )
+            .whereNull("c.deleted_at")
             .orderBy("c.timestamp", "desc")
             .limit(10)
             .offset(page * 10);

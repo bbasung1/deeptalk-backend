@@ -46,7 +46,8 @@ function admin_block(res) {
     <td>게시물 id</td>
     <td>사유</td>
     <td>신고일자</td>
-    <td>차단여부</td>
+    <td>처리상태</td>
+    <td>상태 변경</td>
 </tr>
     `;
     knex
@@ -61,11 +62,65 @@ function admin_block(res) {
                 data += `<td>` + test.post_id + `</td>`;
                 data += `<td>` + test.reason + `</td>`;
                 data += `<td>` + test.report_time.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) + `</td>`;
-                data += `<td>` + test.decision + `</td></tr>`;
+                data += `<td>` + test.status + `</td>`;
+                data += `<td>
+                    <form method="post" action="/admin/setblock/status" style="display:flex;gap:4px;">
+                        <input type="hidden" name="report_id" value="${test.report_id}"/>
+                        <select name="action_type">
+                            <option value="warning">warning</option>
+                            <option value="content_deleted">content_deleted</option>
+                            <option value="account_suspended">account_suspended</option>
+                            <option value="account_banned">account_banned</option>
+                            <option value="dismissed">dismissed</option>
+                            <option value="no_action">no_action</option>
+                        </select>
+                        <input type="text" name="memo" placeholder="메모"/>
+                        <input type="submit" value="처리"/>
+                    </form>
+                </td></tr>`;
             }
             data += `</table>`;
             admin_html("신고현황", data, res);
         });
+}
+
+// 신고 처리 상태 변경 + 처리 내역(report_actions) 기록.
+// admin.js는 개별 관리자 로그인이 없어 admin_id는 NULL로 기록함(개편 시 연결 예정).
+const REPORT_ACTION_TO_STATUS = {
+    warning: "resolved",
+    content_deleted: "resolved",
+    account_suspended: "resolved",
+    account_banned: "resolved",
+    dismissed: "dismissed",
+    no_action: "reviewing",
+};
+async function update_report_status(req, res) {
+    try {
+        const report_id = parseInt(req.body.report_id);
+        const { action_type, memo } = req.body;
+        if (isNaN(report_id) || !Object.prototype.hasOwnProperty.call(REPORT_ACTION_TO_STATUS, action_type)) {
+            return res.end("<h1>잘못된 요청입니다.</h1>");
+        }
+        const status = REPORT_ACTION_TO_STATUS[action_type];
+        const trx = await knex.transaction();
+        try {
+            await trx("report").where("report_id", report_id).update({ status });
+            await trx("report_actions").insert({
+                report_id,
+                admin_id: null,
+                action_type,
+                memo: memo || null,
+            });
+            await trx.commit();
+        } catch (err) {
+            await trx.rollback();
+            throw err;
+        }
+        res.redirect("/admin/setblock");
+    } catch (error) {
+        console.error("Error in update_report_status function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
 }
 // 
 
@@ -534,6 +589,9 @@ router.post("/login", (req, res) => {
 });
 router.get("/setblock", (req, res) => {
     check_login(admin_block(res), req, res);
+});
+router.post("/setblock/status", (req, res) => {
+    check_login(update_report_status(req, res), req, res);
 });
 router.get("/logout", (req, res) => {
     check_login(logout(req, res), req, res);
