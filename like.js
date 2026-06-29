@@ -21,7 +21,7 @@ router.post("/:id", async (req, res) => {
         return res.status(400).json({ success: 0, msg: "id 인식 실패" });
     }
     console.log(req.body);
-    const [dupcheck] = await knex("post_like").select("*").where({ type: req.body.type, user_id: ourid, post_id: req.params.id })
+    const [dupcheck] = await knex("post_like").select("*").where({ type: req.body.type, user_id: ourid, post_id: req.params.id }).whereNull("deleted_at")
     console.log(dupcheck);
     const trx = await knex.transaction();
     const type = req.body.type == 0 ? "talk" : (req.body.type == 1 ? "think" : "comment");
@@ -30,7 +30,8 @@ router.post("/:id", async (req, res) => {
     // console.log(dupcheck);
     if (dupcheck != undefined) {
         try {
-            await trx("post_like").where({ type: req.body.type, post_id: req.params.id, user_id: ourid }).del();
+            // 하드 삭제(.del()) 대신 deleted_at을 채우는 소프트 삭제로 전환 (좋아요 이력 보존).
+            await trx("post_like").where({ type: req.body.type, post_id: req.params.id, user_id: ourid }).whereNull("deleted_at").update({ deleted_at: knex.fn.now() });
             // await trx(type).update({ like: brf_like.like - 1 }).where(num_name, req.params.id);
             await trx(type).where(num_name, req.params.id).decrement("like", 1);
             await trx.commit();
@@ -91,7 +92,7 @@ router.get("/list", async (req, res) => {
     const list = await knex(pt_type_name)
         .leftJoin("profile", `${pt_type_name}.writer_id`, "profile.id")
         .select(`${pt_type_name}.*`, ...islikeandbookmark(ourid, pt_type_name, pt_type_bool), ...iscommentandquote(ourid, pt_type_name, pt_type_bool, "is_comment", pt_type_name), "profile.nickname", "profile.image as profile_image").whereIn(num_name, function () {
-            this.select("post_id").from("post_like").where({ type: pt_type_bool, user_id: ourid });
+            this.select("post_id").from("post_like").where({ type: pt_type_bool, user_id: ourid }).whereNull("deleted_at");
         });
     return res.json(await buildPostResponse(list, ourid));
 });

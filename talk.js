@@ -32,6 +32,7 @@ router.get("/:id", async (req, res) => {
                     .where('user_id', id);
             })
             .where("p.talk_num", req.params.id)
+            .whereNull("p.deleted_at")
             .select('p.*', "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(id, "talk", 0), ...iscommentandquote(id, "talk", 0, "is_comment", "p"));
         if (talk == undefined) {
             return res.json({ msg: "없거나 비공개인 포스트 입니다" })
@@ -50,7 +51,7 @@ router.delete("/:id", async (req, res) => {
     const id = await define_id(id_token, res);
     if (res.headersSent) return; // define_id가 이미 에러 응답을 보냄
     const trx = await knex.transaction();
-    post_info = await knex("talk").select("quote", "quote_type", "vote", "writer_id", "draft").where("talk_num", req.params.id).first();
+    post_info = await knex("talk").select("quote", "quote_type", "vote", "writer_id", "draft").where("talk_num", req.params.id).whereNull("deleted_at").first();
     if (!post_info) {
         return res.status(404).json({ msg: "글을 찾을 수 없습니다" });
     }
@@ -59,7 +60,8 @@ router.delete("/:id", async (req, res) => {
     }
     const senddata = { success: 1 }
     try {
-        await trx("talk").where("talk_num", req.params.id).delete();
+        // 하드 삭제(.delete()) 대신 deleted_at을 채우는 소프트 삭제로 전환.
+        await trx("talk").where("talk_num", req.params.id).update({ deleted_at: knex.fn.now() });
         if (post_info.quote && post_info.draft == 0) {
             senddata.quote_num = await decrement_quote_num(post_info, trx);
         }
