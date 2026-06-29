@@ -177,6 +177,7 @@ router.get("/quotes/:type/:post_id", async (req, res) => {
         knex("think as p")
             .leftJoin("profile", "p.writer_id", "profile.id")
             .where({ quote_type: type, quote: req.params.post_id, 'p.draft': 0 })
+            .whereNull("p.deleted_at")
             .select('p.*', "profile.user_id as user_id", "profile.nickname", "profile.image as profile_image", ...islikeandbookmark(userId, "think", 1), ...iscommentandquote(userId, "think", 1, "is_comment", "p"))
             .limit(10).offset(page * 10),
         knex("comment as p")
