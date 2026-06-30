@@ -35,7 +35,7 @@ ${body}
 }
 function admin_block(res) {
     let data = `
-  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a><br>
+  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a><br>
   <h1>신고 명단</h1>
     <table border="1">
     <tr>
@@ -101,6 +101,24 @@ function escapeHtml(value) {
         .replace(/'/g, "&#39;");
 }
 
+// 어드민 운영 행위 감사 로그(admin_audit_logs) 기록 헬퍼.
+// admin.js는 아직 개별 관리자 로그인이 없어 admin_id는 항상 NULL(개편 시 연결 예정, sql/add_admin_audit_logs_table.sql 참고).
+// detail에는 비밀번호/토큰 등 민감정보를 절대 넣지 말 것 — 이 함수를 호출하는 곳에서 직접 주의해야 함.
+// 감사 로그 기록 실패가 본래 동작(신고 처리, 메시지 발송 등)을 막아서는 안 되므로 에러는 흡수만 함.
+async function logAdminAction({ action, target_type = null, target_id = null, detail = null }) {
+    try {
+        await knex("admin_audit_logs").insert({
+            admin_id: null,
+            action,
+            target_type,
+            target_id: target_id === null || target_id === undefined ? null : String(target_id),
+            detail,
+        });
+    } catch (err) {
+        console.error("Error in logAdminAction:", err);
+    }
+}
+
 // 신고 처리 상태 변경 + 처리 내역(report_actions) 기록.
 // admin.js는 개별 관리자 로그인이 없어 admin_id는 NULL로 기록함(개편 시 연결 예정).
 // report.status는 처리 라이프사이클만 담당 (dismissed는 더 이상 status 값이 아님 — sql/alter_report_status_enum_v2.sql 참고).
@@ -135,6 +153,12 @@ async function update_report_status(req, res) {
             await trx.rollback();
             throw err;
         }
+        await logAdminAction({
+            action: "report_status_change",
+            target_type: "report",
+            target_id: report_id,
+            detail: `action_type=${action_type}, status=${status}`,
+        });
         res.redirect("/admin/setblock");
     } catch (error) {
         console.error("Error in update_report_status function:", error);
@@ -177,7 +201,7 @@ async function report_actions_page(req, res) {
         const rows = await query;
 
         let data = `
-            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
             <h1>신고 처리 내역${reportId !== null ? ` (신고번호 ${escapeHtml(reportId)})` : ""}</h1>
             ${reportId !== null ? `<a href="/admin/report_actions">전체 보기</a><br>` : ""}
             <table border="1">
@@ -264,8 +288,16 @@ async function report_evidence_snapshots_page(req, res) {
         }
         const rows = await query;
 
+        // 원문(content_snapshot_raw)이 포함된 민감 화면이라 조회 자체를 감사 로그에 남김.
+        await logAdminAction({
+            action: "view_report_evidence_snapshot",
+            target_type: "report",
+            target_id: reportId,
+            detail: reportId === null ? "viewed all snapshots" : null,
+        });
+
         let data = `
-            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
             <h1>신고 증거 스냅샷${reportId !== null ? ` (신고번호 ${escapeHtml(reportId)})` : ""}</h1>
             <p style="color:#b00">⚠️ 원문(raw)에는 신고 시점 콘텐츠가 그대로 들어있습니다. 관리자 외 공유/캡처에 주의하세요.</p>
             ${reportId !== null ? `<a href="/admin/report_evidence_snapshots">전체 보기</a><br>` : ""}
@@ -309,6 +341,65 @@ async function report_evidence_snapshots_page(req, res) {
         admin_html("신고 증거 스냅샷", data, res);
     } catch (error) {
         console.error("Error in report_evidence_snapshots_page function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
+// admin_audit_logs 조회 화면. target_type/target_id로 필터 가능, 최신 300건만 표시(전체 스캔 방지).
+async function admin_audit_logs_page(req, res) {
+    try {
+        const targetType = req.query.target_type ? String(req.query.target_type).slice(0, 30) : null;
+        const targetId = req.query.target_id !== undefined && req.query.target_id !== ""
+            ? String(req.query.target_id).slice(0, 50)
+            : null;
+
+        const query = knex("admin_audit_logs")
+            .select("id", "admin_id", "action", "target_type", "target_id", "detail", "created_at")
+            .orderBy("created_at", "desc")
+            .limit(300);
+        if (targetType) {
+            query.where("target_type", targetType);
+        }
+        if (targetId !== null) {
+            query.where("target_id", targetId);
+        }
+        const rows = await query;
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <h1>어드민 감사 로그 (최신 300건)</h1>
+            <form method="get" action="/admin/audit_logs" style="margin-bottom:8px;">
+                <input type="text" name="target_type" placeholder="target_type (예: report)" value="${escapeHtml(targetType || "")}"/>
+                <input type="text" name="target_id" placeholder="target_id" value="${escapeHtml(targetId || "")}"/>
+                <input type="submit" value="필터"/>
+                <a href="/admin/audit_logs">초기화</a>
+            </form>
+            <table border="1">
+            <tr>
+                <td>id</td>
+                <td>admin_id</td>
+                <td>action</td>
+                <td>target_type</td>
+                <td>target_id</td>
+                <td>detail</td>
+                <td>일시</td>
+            </tr>
+        `;
+        for (const row of rows) {
+            data += `<tr>
+                <td>${escapeHtml(row.id)}</td>
+                <td>${row.admin_id === null ? "-" : escapeHtml(row.admin_id)}</td>
+                <td>${escapeHtml(row.action)}</td>
+                <td>${row.target_type === null ? "-" : escapeHtml(row.target_type)}</td>
+                <td>${row.target_id === null ? "-" : escapeHtml(row.target_id)}</td>
+                <td>${escapeHtml(row.detail)}</td>
+                <td>${row.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
+            </tr>`;
+        }
+        data += `</table>`;
+        admin_html("어드민 감사 로그", data, res);
+    } catch (error) {
+        console.error("Error in admin_audit_logs_page function:", error);
         res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
     }
 }
@@ -682,6 +773,13 @@ async function send_admin_message(req, res) {
         const insertRows = targetIds.map((user_id) => ({ group_id, user_id, title, body }));
         await knex("admin_message").insert(insertRows);
 
+        await logAdminAction({
+            action: "send_admin_message",
+            target_type: "admin_message",
+            target_id: group_id,
+            detail: `title=${title}, target_count=${targetIds.length}`,
+        });
+
         res.redirect("/admin/admin_message");
     } catch (error) {
         console.error("Error in send_admin_message function:", error);
@@ -822,5 +920,11 @@ router.get("/report_evidence_snapshots", (req, res) => {
         return res.redirect("/admin");
     }
     report_evidence_snapshots_page(req, res);
+});
+router.get("/audit_logs", (req, res) => {
+    if (!req.headers.cookie) {
+        return res.redirect("/admin");
+    }
+    admin_audit_logs_page(req, res);
 });
 module.exports = router;
