@@ -190,7 +190,7 @@ async function report_actions_page(req, res) {
                 "ra.created_at",
                 "r.reporter_id",
                 "r.reported_id",
-                "r.type",
+                "r.post_type",
                 "r.post_id",
                 "r.reason"
             )
@@ -225,7 +225,7 @@ async function report_actions_page(req, res) {
             data += `<td><a href="/admin/report_actions?report_id=${escapeHtml(row.report_id)}">${escapeHtml(row.report_id)}</a></td>`;
             data += `<td>${escapeHtml(row.reporter_id)}</td>`;
             data += `<td>${escapeHtml(row.reported_id)}</td>`;
-            data += `<td>${escapeHtml(row.type)}</td>`;
+            data += `<td>${escapeHtml(row.post_type)}</td>`;
             data += `<td>${escapeHtml(row.post_id)}</td>`;
             data += `<td>${escapeHtml(row.reason)}</td>`;
             data += `<td>${row.admin_id === null ? "-" : escapeHtml(row.admin_id)}</td>`;
