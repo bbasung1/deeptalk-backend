@@ -35,7 +35,7 @@ ${body}
 }
 function admin_block(res) {
     let data = `
-  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a><br>
+  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a><br>
   <h1>신고 명단</h1>
     <table border="1">
     <tr>
@@ -49,6 +49,7 @@ function admin_block(res) {
     <td>처리상태</td>
     <td>상태 변경</td>
     <td>처리 내역</td>
+    <td>증거 스냅샷</td>
 </tr>
     `;
     knex
@@ -80,6 +81,7 @@ function admin_block(res) {
                     </form>
                 </td>
                 <td><a href="/admin/report_actions?report_id=${escapeHtml(test.report_id)}">내역 보기</a></td>
+                <td><a href="/admin/report_evidence_snapshots?report_id=${escapeHtml(test.report_id)}">스냅샷 보기</a></td>
                 </tr>`;
             }
             data += `</table>`;
@@ -212,6 +214,101 @@ async function report_actions_page(req, res) {
         admin_html("신고 처리 내역", data, res);
     } catch (error) {
         console.error("Error in report_actions_page function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
+// report_evidence_snapshots 조회 화면.
+// content_snapshot_raw는 신고 시점 콘텐츠 원문(개인정보 포함 가능)이라 이 페이지 전체를
+// check_login으로 막아둔 것 외에는 별도 마스킹 없이 그대로 보여줌 — 관리자만 봐야 하는 데이터이므로
+// sql/add_report_evidence_snapshots_table.sql의 "관리자 권한으로만 접근" 요구사항을 라우트 레벨에서 만족시킴.
+// JSON 컬럼(content_snapshot_raw/masked/context_json)은 문자열 또는 이미 파싱된 객체로 들어올 수 있어 안전하게 처리.
+function stringifySnapshotValue(value) {
+    if (value === null || value === undefined) return "-";
+    if (typeof value === "object") return JSON.stringify(value);
+    return String(value);
+}
+
+async function report_evidence_snapshots_page(req, res) {
+    try {
+        let reportId = null;
+        if (req.query.report_id !== undefined) {
+            reportId = parseInt(req.query.report_id, 10);
+            if (isNaN(reportId) || reportId <= 0) {
+                return res.end("<h1>잘못된 요청입니다.</h1>");
+            }
+        }
+
+        const query = knex("report_evidence_snapshots as s")
+            .join("report as r", "r.report_id", "s.report_id")
+            .select(
+                "s.id",
+                "s.report_id",
+                "s.moderation_case_id",
+                "s.target_type",
+                "s.target_subtype",
+                "s.target_id",
+                "s.content_snapshot_raw",
+                "s.content_snapshot_masked",
+                "s.visibility_status_snapshot",
+                "s.hidden_by_report",
+                "s.hidden_by_admin",
+                "s.created_at",
+                "r.reporter_id",
+                "r.reported_id",
+                "r.reason"
+            )
+            .orderBy("s.created_at", "desc");
+        if (reportId !== null) {
+            query.where("s.report_id", reportId);
+        }
+        const rows = await query;
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <h1>신고 증거 스냅샷${reportId !== null ? ` (신고번호 ${escapeHtml(reportId)})` : ""}</h1>
+            <p style="color:#b00">⚠️ 원문(raw)에는 신고 시점 콘텐츠가 그대로 들어있습니다. 관리자 외 공유/캡처에 주의하세요.</p>
+            ${reportId !== null ? `<a href="/admin/report_evidence_snapshots">전체 보기</a><br>` : ""}
+            <table border="1">
+            <tr>
+                <td>스냅샷id</td>
+                <td>신고번호</td>
+                <td>case id</td>
+                <td>대상유형</td>
+                <td>대상id</td>
+                <td>신고자 id</td>
+                <td>신고된 id</td>
+                <td>사유</td>
+                <td>신고시점 노출상태</td>
+                <td>신고로 비노출</td>
+                <td>관리자가 비노출</td>
+                <td>원문(raw, 관리자 전용)</td>
+                <td>마스킹본</td>
+                <td>생성일시</td>
+            </tr>
+        `;
+        for (const row of rows) {
+            data += `<tr>`;
+            data += `<td>${escapeHtml(row.id)}</td>`;
+            data += `<td><a href="/admin/report_evidence_snapshots?report_id=${escapeHtml(row.report_id)}">${escapeHtml(row.report_id)}</a></td>`;
+            data += `<td>${row.moderation_case_id === null ? "-" : escapeHtml(row.moderation_case_id)}</td>`;
+            data += `<td>${escapeHtml(row.target_type)}${row.target_subtype ? " / " + escapeHtml(row.target_subtype) : ""}</td>`;
+            data += `<td>${row.target_id === null ? "-" : escapeHtml(row.target_id)}</td>`;
+            data += `<td>${escapeHtml(row.reporter_id)}</td>`;
+            data += `<td>${escapeHtml(row.reported_id)}</td>`;
+            data += `<td>${escapeHtml(row.reason)}</td>`;
+            data += `<td>${escapeHtml(row.visibility_status_snapshot)}</td>`;
+            data += `<td>${row.hidden_by_report ? "Y" : "N"}</td>`;
+            data += `<td>${row.hidden_by_admin ? "Y" : "N"}</td>`;
+            data += `<td><pre style="max-width:320px;white-space:pre-wrap;">${escapeHtml(stringifySnapshotValue(row.content_snapshot_raw))}</pre></td>`;
+            data += `<td><pre style="max-width:320px;white-space:pre-wrap;">${escapeHtml(stringifySnapshotValue(row.content_snapshot_masked))}</pre></td>`;
+            data += `<td>${row.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>`;
+            data += `</tr>`;
+        }
+        data += `</table>`;
+        admin_html("신고 증거 스냅샷", data, res);
+    } catch (error) {
+        console.error("Error in report_evidence_snapshots_page function:", error);
         res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
     }
 }
@@ -717,5 +814,13 @@ router.get("/report_actions", (req, res) => {
         return res.redirect("/admin");
     }
     report_actions_page(req, res);
+});
+// content_snapshot_raw(신고 시점 원문)를 보여주는 민감한 화면이라 cookie 체크를 핸들러 호출보다
+// 먼저 평가하는 패턴을 report_actions와 동일하게 사용 — check_login(fn(), ...) 패턴은 쓰지 않음.
+router.get("/report_evidence_snapshots", (req, res) => {
+    if (!req.headers.cookie) {
+        return res.redirect("/admin");
+    }
+    report_evidence_snapshots_page(req, res);
 });
 module.exports = router;
