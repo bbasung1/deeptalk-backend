@@ -35,7 +35,7 @@ ${body}
 }
 function admin_block(res) {
     let data = `
-  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a><br>
+  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/moderation_cases">모더레이션 케이스 목록 페이지로</a> <a href="/admin/report_ai_reviews">AI 분석 히스토리 페이지로</a><br>
   <h1>신고 명단</h1>
     <table border="1">
     <tr>
@@ -201,7 +201,7 @@ async function report_actions_page(req, res) {
         const rows = await query;
 
         let data = `
-            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/moderation_cases">모더레이션 케이스 목록 페이지로</a> <a href="/admin/report_ai_reviews">AI 분석 히스토리 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
             <h1>신고 처리 내역${reportId !== null ? ` (신고번호 ${escapeHtml(reportId)})` : ""}</h1>
             ${reportId !== null ? `<a href="/admin/report_actions">전체 보기</a><br>` : ""}
             <table border="1">
@@ -297,7 +297,7 @@ async function report_evidence_snapshots_page(req, res) {
         });
 
         let data = `
-            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/moderation_cases">모더레이션 케이스 목록 페이지로</a> <a href="/admin/report_ai_reviews">AI 분석 히스토리 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
             <h1>신고 증거 스냅샷${reportId !== null ? ` (신고번호 ${escapeHtml(reportId)})` : ""}</h1>
             <p style="color:#b00">⚠️ 원문(raw)에는 신고 시점 콘텐츠가 그대로 들어있습니다. 관리자 외 공유/캡처에 주의하세요.</p>
             ${reportId !== null ? `<a href="/admin/report_evidence_snapshots">전체 보기</a><br>` : ""}
@@ -366,7 +366,7 @@ async function admin_audit_logs_page(req, res) {
         const rows = await query;
 
         let data = `
-            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/moderation_cases">모더레이션 케이스 목록 페이지로</a> <a href="/admin/report_ai_reviews">AI 분석 히스토리 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
             <h1>어드민 감사 로그 (최신 300건)</h1>
             <form method="get" action="/admin/audit_logs" style="margin-bottom:8px;">
                 <input type="text" name="target_type" placeholder="target_type (예: report)" value="${escapeHtml(targetType || "")}"/>
@@ -400,6 +400,184 @@ async function admin_audit_logs_page(req, res) {
         admin_html("어드민 감사 로그", data, res);
     } catch (error) {
         console.error("Error in admin_audit_logs_page function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
+// moderation_cases 목록 화면. 기존에는 GET /cases/:caseId(moderation.js, requireAdmin API 키)로
+// case id를 미리 알아야만 단건 조회가 가능했음 — case id를 몰라도 전체를 훑어볼 수 있는 화면이 목적.
+// moderation.js의 requireAdmin(API 키) 대신 admin.js의 cookie 인증을 그대로 사용(다른 admin.js 화면과 통일).
+const MODERATION_CASE_STATUSES = ["pending", "reviewing", "resolved", "dismissed"];
+async function moderation_cases_page(req, res) {
+    try {
+        const status = req.query.status ? String(req.query.status) : null;
+        if (status !== null && !MODERATION_CASE_STATUSES.includes(status)) {
+            return res.end("<h1>잘못된 요청입니다.</h1>");
+        }
+
+        const reportCountSubquery = knex("moderation_case_reports")
+            .select("moderation_case_id")
+            .count("report_id as report_count")
+            .groupBy("moderation_case_id")
+            .as("rc");
+
+        const query = knex("moderation_cases as mc")
+            .leftJoin(reportCountSubquery, "rc.moderation_case_id", "mc.id")
+            .select(
+                "mc.id",
+                "mc.target_type",
+                "mc.target_subtype",
+                "mc.target_id",
+                "mc.status",
+                "mc.admin_id",
+                "mc.created_at",
+                "mc.updated_at",
+                "mc.resolved_at",
+                knex.raw("COALESCE(rc.report_count, 0) as report_count")
+            )
+            .orderBy("mc.created_at", "desc")
+            .limit(300);
+        if (status !== null) {
+            query.where("mc.status", status);
+        }
+        const rows = await query;
+
+        let statusOptions = `<option value="">전체</option>`;
+        for (const s of MODERATION_CASE_STATUSES) {
+            statusOptions += `<option value="${s}"${status === s ? " selected" : ""}>${s}</option>`;
+        }
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/report_ai_reviews">AI 분석 히스토리 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <h1>모더레이션 케이스 목록 (최신 300건)</h1>
+            <form method="get" action="/admin/moderation_cases" style="margin-bottom:8px;">
+                <select name="status">${statusOptions}</select>
+                <input type="submit" value="필터"/>
+                <a href="/admin/moderation_cases">초기화</a>
+            </form>
+            <table border="1">
+            <tr>
+                <td>case id</td>
+                <td>대상유형</td>
+                <td>대상id</td>
+                <td>상태</td>
+                <td>연결된 신고 수</td>
+                <td>처리자(admin_id)</td>
+                <td>생성일</td>
+                <td>수정일</td>
+                <td>해결일</td>
+                <td>AI 분석 히스토리</td>
+            </tr>
+        `;
+        for (const row of rows) {
+            data += `<tr>
+                <td>${escapeHtml(row.id)}</td>
+                <td>${escapeHtml(row.target_type)}${row.target_subtype ? " / " + escapeHtml(row.target_subtype) : ""}</td>
+                <td>${row.target_id === null ? "-" : escapeHtml(row.target_id)}</td>
+                <td>${escapeHtml(row.status)}</td>
+                <td>${escapeHtml(row.report_count)}</td>
+                <td>${row.admin_id === null ? "-" : escapeHtml(row.admin_id)}</td>
+                <td>${row.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
+                <td>${row.updated_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
+                <td>${row.resolved_at ? row.resolved_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "-"}</td>
+                <td><a href="/admin/report_ai_reviews?moderation_case_id=${escapeHtml(row.id)}">히스토리 보기</a></td>
+            </tr>`;
+        }
+        data += `</table>`;
+        admin_html("모더레이션 케이스 목록", data, res);
+    } catch (error) {
+        console.error("Error in moderation_cases_page function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
+// report_ai_reviews 히스토리 조회 화면.
+// 기존에는 case 단건 조회 시 최신 리뷰 1개만 같이 나와서(moderation.js GET /cases/:caseId) 시점별
+// 분석 결과 변화를 볼 방법이 없었음. moderation_case_id로 필터링하면 해당 case의 전체 히스토리,
+// 없으면 전체 케이스의 최근 리뷰를 최신순으로 보여줌.
+// AI 분석 자체는 아직 mock(moderation.js 17행 참고)이라 데이터 내용은 실제 분석이 아님.
+async function report_ai_reviews_page(req, res) {
+    try {
+        let caseId = null;
+        if (req.query.moderation_case_id !== undefined) {
+            caseId = parseInt(req.query.moderation_case_id, 10);
+            if (isNaN(caseId) || caseId <= 0) {
+                return res.end("<h1>잘못된 요청입니다.</h1>");
+            }
+        }
+
+        const query = knex("report_ai_reviews as rev")
+            .select(
+                "rev.id",
+                "rev.moderation_case_id",
+                "rev.policy_version",
+                "rev.prompt_version",
+                "rev.triage_result_json",
+                "rev.analysis_result_json",
+                "rev.risk_level",
+                "rev.case_family",
+                "rev.primary_case_type",
+                "rev.recommended_queue",
+                "rev.recommended_action",
+                "rev.severity_level",
+                "rev.confidence",
+                "rev.context_expansion_needed",
+                "rev.created_at"
+            )
+            .orderBy("rev.created_at", "desc")
+            .limit(300);
+        if (caseId !== null) {
+            query.where("rev.moderation_case_id", caseId);
+        }
+        const rows = await query;
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/moderation_cases">모더레이션 케이스 목록 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <h1>AI 분석 히스토리${caseId !== null ? ` (case id ${escapeHtml(caseId)})` : " (최신 300건)"}</h1>
+            <p>※ AI 분석은 아직 mock 데이터입니다 (실제 외부 AI 호출 없음).</p>
+            ${caseId !== null ? `<a href="/admin/report_ai_reviews">전체 보기</a><br>` : ""}
+            <table border="1">
+            <tr>
+                <td>리뷰id</td>
+                <td>case id</td>
+                <td>정책버전</td>
+                <td>프롬프트버전</td>
+                <td>risk_level</td>
+                <td>case_family</td>
+                <td>primary_case_type</td>
+                <td>recommended_queue</td>
+                <td>recommended_action</td>
+                <td>severity_level</td>
+                <td>confidence</td>
+                <td>맥락확장필요</td>
+                <td>triage 결과</td>
+                <td>분석 결과</td>
+                <td>생성일시</td>
+            </tr>
+        `;
+        for (const row of rows) {
+            data += `<tr>
+                <td>${escapeHtml(row.id)}</td>
+                <td><a href="/admin/report_ai_reviews?moderation_case_id=${escapeHtml(row.moderation_case_id)}">${escapeHtml(row.moderation_case_id)}</a></td>
+                <td>${escapeHtml(row.policy_version)}</td>
+                <td>${escapeHtml(row.prompt_version)}</td>
+                <td>${row.risk_level === null ? "-" : escapeHtml(row.risk_level)}</td>
+                <td>${row.case_family === null ? "-" : escapeHtml(row.case_family)}</td>
+                <td>${row.primary_case_type === null ? "-" : escapeHtml(row.primary_case_type)}</td>
+                <td>${row.recommended_queue === null ? "-" : escapeHtml(row.recommended_queue)}</td>
+                <td>${row.recommended_action === null ? "-" : escapeHtml(row.recommended_action)}</td>
+                <td>${row.severity_level === null ? "-" : escapeHtml(row.severity_level)}</td>
+                <td>${row.confidence === null ? "-" : escapeHtml(row.confidence)}</td>
+                <td>${row.context_expansion_needed ? "Y" : "N"}</td>
+                <td><pre style="max-width:260px;white-space:pre-wrap;">${escapeHtml(stringifySnapshotValue(row.triage_result_json))}</pre></td>
+                <td><pre style="max-width:260px;white-space:pre-wrap;">${escapeHtml(stringifySnapshotValue(row.analysis_result_json))}</pre></td>
+                <td>${row.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
+            </tr>`;
+        }
+        data += `</table>`;
+        admin_html("AI 분석 히스토리", data, res);
+    } catch (error) {
+        console.error("Error in report_ai_reviews_page function:", error);
         res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
     }
 }
@@ -926,5 +1104,17 @@ router.get("/audit_logs", (req, res) => {
         return res.redirect("/admin");
     }
     admin_audit_logs_page(req, res);
+});
+router.get("/moderation_cases", (req, res) => {
+    if (!req.headers.cookie) {
+        return res.redirect("/admin");
+    }
+    moderation_cases_page(req, res);
+});
+router.get("/report_ai_reviews", (req, res) => {
+    if (!req.headers.cookie) {
+        return res.redirect("/admin");
+    }
+    report_ai_reviews_page(req, res);
 });
 module.exports = router;
