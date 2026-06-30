@@ -137,4 +137,7 @@ dist
 
 # Claude Code
 .claude/
+
 cookies.txt
+docs/
+cozyhumanclub-firebase-adminsdk-fbsvc-bd5923458a.json
