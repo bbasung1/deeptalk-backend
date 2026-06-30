@@ -35,7 +35,7 @@ ${body}
 }
 function admin_block(res) {
     let data = `
-  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a><br>
   <h1>신고 명단</h1>
     <table border="1">
     <tr>
@@ -48,6 +48,7 @@ function admin_block(res) {
     <td>신고일자</td>
     <td>처리상태</td>
     <td>상태 변경</td>
+    <td>처리 내역</td>
 </tr>
     `;
     knex
@@ -55,17 +56,17 @@ function admin_block(res) {
         .from("report")
         .then((list1) => {
             for (test of list1) {
-                data += `<tr><td>` + test.report_id + `</td>`;
-                data += `<td>` + test.reporter_id + `</td>`;
-                data += `<td>` + test.reported_id + `</td>`;
-                data += `<td>` + test.type + `</td>`;
-                data += `<td>` + test.post_id + `</td>`;
-                data += `<td>` + test.reason + `</td>`;
+                data += `<tr><td>` + escapeHtml(test.report_id) + `</td>`;
+                data += `<td>` + escapeHtml(test.reporter_id) + `</td>`;
+                data += `<td>` + escapeHtml(test.reported_id) + `</td>`;
+                data += `<td>` + escapeHtml(test.type) + `</td>`;
+                data += `<td>` + escapeHtml(test.post_id) + `</td>`;
+                data += `<td>` + escapeHtml(test.reason) + `</td>`;
                 data += `<td>` + test.report_time.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) + `</td>`;
-                data += `<td>` + test.status + `</td>`;
+                data += `<td>` + escapeHtml(test.status) + `</td>`;
                 data += `<td>
                     <form method="post" action="/admin/setblock/status" style="display:flex;gap:4px;">
-                        <input type="hidden" name="report_id" value="${test.report_id}"/>
+                        <input type="hidden" name="report_id" value="${escapeHtml(test.report_id)}"/>
                         <select name="action_type">
                             <option value="warning">warning</option>
                             <option value="content_deleted">content_deleted</option>
@@ -77,21 +78,37 @@ function admin_block(res) {
                         <input type="text" name="memo" placeholder="메모"/>
                         <input type="submit" value="처리"/>
                     </form>
-                </td></tr>`;
+                </td>
+                <td><a href="/admin/report_actions?report_id=${escapeHtml(test.report_id)}">내역 보기</a></td>
+                </tr>`;
             }
             data += `</table>`;
             admin_html("신고현황", data, res);
         });
 }
 
+// HTML 출력에 그대로 끼워넣는 값(신고 사유, 메모 등 사용자/관리자 입력 포함)은 항상 이 함수로 escape.
+// XSS 방지용 — report_actions_page처럼 자유 텍스트(memo)를 보여주는 화면에서는 반드시 사용.
+function escapeHtml(value) {
+    if (value === null || value === undefined) return "";
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 // 신고 처리 상태 변경 + 처리 내역(report_actions) 기록.
 // admin.js는 개별 관리자 로그인이 없어 admin_id는 NULL로 기록함(개편 시 연결 예정).
+// report.status는 처리 라이프사이클만 담당 (dismissed는 더 이상 status 값이 아님 — sql/alter_report_status_enum_v2.sql 참고).
+// "어떻게 처리됐는지"는 report_actions.action_type에 그대로 기록되므로 정보 손실 없음.
 const REPORT_ACTION_TO_STATUS = {
     warning: "resolved",
     content_deleted: "resolved",
     account_suspended: "resolved",
     account_banned: "resolved",
-    dismissed: "dismissed",
+    dismissed: "resolved",
     no_action: "reviewing",
 };
 async function update_report_status(req, res) {
@@ -122,7 +139,82 @@ async function update_report_status(req, res) {
         res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
     }
 }
-// 
+//
+
+// 신고 처리 내역(report_actions) 조회 화면.
+// report_id 쿼리 파라미터를 주면 해당 신고 1건의 처리 이력만, 없으면 전체 이력을 최신순으로 보여줌.
+async function report_actions_page(req, res) {
+    try {
+        let reportId = null;
+        if (req.query.report_id !== undefined) {
+            reportId = parseInt(req.query.report_id, 10);
+            if (isNaN(reportId) || reportId <= 0) {
+                return res.end("<h1>잘못된 요청입니다.</h1>");
+            }
+        }
+
+        const query = knex("report_actions as ra")
+            .join("report as r", "r.report_id", "ra.report_id")
+            .select(
+                "ra.id",
+                "ra.report_id",
+                "ra.admin_id",
+                "ra.action_type",
+                "ra.memo",
+                "ra.created_at",
+                "r.reporter_id",
+                "r.reported_id",
+                "r.type",
+                "r.post_id",
+                "r.reason"
+            )
+            .orderBy("ra.created_at", "desc");
+        if (reportId !== null) {
+            query.where("ra.report_id", reportId);
+        }
+        const rows = await query;
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <h1>신고 처리 내역${reportId !== null ? ` (신고번호 ${escapeHtml(reportId)})` : ""}</h1>
+            ${reportId !== null ? `<a href="/admin/report_actions">전체 보기</a><br>` : ""}
+            <table border="1">
+            <tr>
+                <td>처리번호</td>
+                <td>신고번호</td>
+                <td>신고자 id</td>
+                <td>신고된 id</td>
+                <td>게시물 유형</td>
+                <td>게시물 id</td>
+                <td>사유</td>
+                <td>처리자(admin_id)</td>
+                <td>조치</td>
+                <td>메모</td>
+                <td>처리일시</td>
+            </tr>
+        `;
+        for (const row of rows) {
+            data += `<tr>`;
+            data += `<td>${escapeHtml(row.id)}</td>`;
+            data += `<td><a href="/admin/report_actions?report_id=${escapeHtml(row.report_id)}">${escapeHtml(row.report_id)}</a></td>`;
+            data += `<td>${escapeHtml(row.reporter_id)}</td>`;
+            data += `<td>${escapeHtml(row.reported_id)}</td>`;
+            data += `<td>${escapeHtml(row.type)}</td>`;
+            data += `<td>${escapeHtml(row.post_id)}</td>`;
+            data += `<td>${escapeHtml(row.reason)}</td>`;
+            data += `<td>${row.admin_id === null ? "-" : escapeHtml(row.admin_id)}</td>`;
+            data += `<td>${escapeHtml(row.action_type)}</td>`;
+            data += `<td>${escapeHtml(row.memo)}</td>`;
+            data += `<td>${row.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>`;
+            data += `</tr>`;
+        }
+        data += `</table>`;
+        admin_html("신고 처리 내역", data, res);
+    } catch (error) {
+        console.error("Error in report_actions_page function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
 
 async function member(res) {
     try {
@@ -616,5 +708,14 @@ router.post("/admin_message", (req, res) => {
 });
 router.get("/app_launch_count", (req, res) => {
     check_login(app_launch_count(res), req, res);
+});
+// 다른 라우트와 달리 인자를 먼저 평가해 호출하는 check_login(fn(), ...) 패턴을 쓰지 않음.
+// 그 패턴은 fn()이 cookie 체크 전에 이미 실행돼버리는 기존 버그가 있어(추후 admin.js 개편 시 정리 예정),
+// 신규 라우트에서는 반복하지 않고 cookie 체크를 먼저 한 뒤에만 핸들러를 호출함.
+router.get("/report_actions", (req, res) => {
+    if (!req.headers.cookie) {
+        return res.redirect("/admin");
+    }
+    report_actions_page(req, res);
 });
 module.exports = router;
