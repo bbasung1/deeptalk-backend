@@ -34,7 +34,7 @@ ${body}
 }
 function admin_block(res) {
     let data = `
-  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a> <a href="/admin/session_stats">실제 세션 통계 페이지로</a><br>
+  <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a><a href="/admin/post">글 현황 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a> <a href="/admin/session_stats">실제 세션 통계 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/moderation_cases">모더레이션 케이스 목록 페이지로</a> <a href="/admin/report_ai_reviews">AI 분석 히스토리 페이지로</a><br>
   <h1>신고 명단</h1>
     <table border="1">
     <tr>
@@ -47,6 +47,8 @@ function admin_block(res) {
     <td>신고일자</td>
     <td>처리상태</td>
     <td>상태 변경</td>
+    <td>처리 내역</td>
+    <td>증거 스냅샷</td>
 </tr>
     `;
     knex
@@ -54,17 +56,17 @@ function admin_block(res) {
         .from("report")
         .then((list1) => {
             for (test of list1) {
-                data += `<tr><td>` + test.report_id + `</td>`;
-                data += `<td>` + test.reporter_id + `</td>`;
-                data += `<td>` + test.reported_id + `</td>`;
-                data += `<td>` + test.type + `</td>`;
-                data += `<td>` + test.post_id + `</td>`;
-                data += `<td>` + test.reason + `</td>`;
+                data += `<tr><td>` + escapeHtml(test.report_id) + `</td>`;
+                data += `<td>` + escapeHtml(test.reporter_id) + `</td>`;
+                data += `<td>` + escapeHtml(test.reported_id) + `</td>`;
+                data += `<td>` + escapeHtml(test.type) + `</td>`;
+                data += `<td>` + escapeHtml(test.post_id) + `</td>`;
+                data += `<td>` + escapeHtml(test.reason) + `</td>`;
                 data += `<td>` + test.report_time.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) + `</td>`;
-                data += `<td>` + test.status + `</td>`;
+                data += `<td>` + escapeHtml(test.status) + `</td>`;
                 data += `<td>
                     <form method="post" action="/admin/setblock/status" style="display:flex;gap:4px;">
-                        <input type="hidden" name="report_id" value="${test.report_id}"/>
+                        <input type="hidden" name="report_id" value="${escapeHtml(test.report_id)}"/>
                         <select name="action_type">
                             <option value="warning">warning</option>
                             <option value="content_deleted">content_deleted</option>
@@ -76,21 +78,56 @@ function admin_block(res) {
                         <input type="text" name="memo" placeholder="메모"/>
                         <input type="submit" value="처리"/>
                     </form>
-                </td></tr>`;
+                </td>
+                <td><a href="/admin/report_actions?report_id=${escapeHtml(test.report_id)}">내역 보기</a></td>
+                <td><a href="/admin/report_evidence_snapshots?report_id=${escapeHtml(test.report_id)}">스냅샷 보기</a></td>
+                </tr>`;
             }
             data += `</table>`;
             admin_html("신고현황", data, res);
         });
 }
 
+// HTML 출력에 그대로 끼워넣는 값(신고 사유, 메모 등 사용자/관리자 입력 포함)은 항상 이 함수로 escape.
+// XSS 방지용 — report_actions_page처럼 자유 텍스트(memo)를 보여주는 화면에서는 반드시 사용.
+function escapeHtml(value) {
+    if (value === null || value === undefined) return "";
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+// 어드민 운영 행위 감사 로그(admin_audit_logs) 기록 헬퍼.
+// admin.js는 아직 개별 관리자 로그인이 없어 admin_id는 항상 NULL(개편 시 연결 예정, sql/add_admin_audit_logs_table.sql 참고).
+// detail에는 비밀번호/토큰 등 민감정보를 절대 넣지 말 것 — 이 함수를 호출하는 곳에서 직접 주의해야 함.
+// 감사 로그 기록 실패가 본래 동작(신고 처리, 메시지 발송 등)을 막아서는 안 되므로 에러는 흡수만 함.
+async function logAdminAction({ action, target_type = null, target_id = null, detail = null }) {
+    try {
+        await knex("admin_audit_logs").insert({
+            admin_id: null,
+            action,
+            target_type,
+            target_id: target_id === null || target_id === undefined ? null : String(target_id),
+            detail,
+        });
+    } catch (err) {
+        console.error("Error in logAdminAction:", err);
+    }
+}
+
 // 신고 처리 상태 변경 + 처리 내역(report_actions) 기록.
 // admin.js는 개별 관리자 로그인이 없어 admin_id는 NULL로 기록함(개편 시 연결 예정).
+// report.status는 처리 라이프사이클만 담당 (dismissed는 더 이상 status 값이 아님 — sql/alter_report_status_enum_v2.sql 참고).
+// "어떻게 처리됐는지"는 report_actions.action_type에 그대로 기록되므로 정보 손실 없음.
 const REPORT_ACTION_TO_STATUS = {
     warning: "resolved",
     content_deleted: "resolved",
     account_suspended: "resolved",
     account_banned: "resolved",
-    dismissed: "dismissed",
+    dismissed: "resolved",
     no_action: "reviewing",
 };
 async function update_report_status(req, res) {
@@ -115,13 +152,434 @@ async function update_report_status(req, res) {
             await trx.rollback();
             throw err;
         }
+        await logAdminAction({
+            action: "report_status_change",
+            target_type: "report",
+            target_id: report_id,
+            detail: `action_type=${action_type}, status=${status}`,
+        });
         res.redirect("/admin/setblock");
     } catch (error) {
         console.error("Error in update_report_status function:", error);
         res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
     }
 }
-// 
+//
+
+// 신고 처리 내역(report_actions) 조회 화면.
+// report_id 쿼리 파라미터를 주면 해당 신고 1건의 처리 이력만, 없으면 전체 이력을 최신순으로 보여줌.
+async function report_actions_page(req, res) {
+    try {
+        let reportId = null;
+        if (req.query.report_id !== undefined) {
+            reportId = parseInt(req.query.report_id, 10);
+            if (isNaN(reportId) || reportId <= 0) {
+                return res.end("<h1>잘못된 요청입니다.</h1>");
+            }
+        }
+
+        const query = knex("report_actions as ra")
+            .join("report as r", "r.report_id", "ra.report_id")
+            .select(
+                "ra.id",
+                "ra.report_id",
+                "ra.admin_id",
+                "ra.action_type",
+                "ra.memo",
+                "ra.created_at",
+                "r.reporter_id",
+                "r.reported_id",
+                "r.post_type",
+                "r.post_id",
+                "r.reason"
+            )
+            .orderBy("ra.created_at", "desc");
+        if (reportId !== null) {
+            query.where("ra.report_id", reportId);
+        }
+        const rows = await query;
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/moderation_cases">모더레이션 케이스 목록 페이지로</a> <a href="/admin/report_ai_reviews">AI 분석 히스토리 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <h1>신고 처리 내역${reportId !== null ? ` (신고번호 ${escapeHtml(reportId)})` : ""}</h1>
+            ${reportId !== null ? `<a href="/admin/report_actions">전체 보기</a><br>` : ""}
+            <table border="1">
+            <tr>
+                <td>처리번호</td>
+                <td>신고번호</td>
+                <td>신고자 id</td>
+                <td>신고된 id</td>
+                <td>게시물 유형</td>
+                <td>게시물 id</td>
+                <td>사유</td>
+                <td>처리자(admin_id)</td>
+                <td>조치</td>
+                <td>메모</td>
+                <td>처리일시</td>
+            </tr>
+        `;
+        for (const row of rows) {
+            data += `<tr>`;
+            data += `<td>${escapeHtml(row.id)}</td>`;
+            data += `<td><a href="/admin/report_actions?report_id=${escapeHtml(row.report_id)}">${escapeHtml(row.report_id)}</a></td>`;
+            data += `<td>${escapeHtml(row.reporter_id)}</td>`;
+            data += `<td>${escapeHtml(row.reported_id)}</td>`;
+            data += `<td>${escapeHtml(row.post_type)}</td>`;
+            data += `<td>${escapeHtml(row.post_id)}</td>`;
+            data += `<td>${escapeHtml(row.reason)}</td>`;
+            data += `<td>${row.admin_id === null ? "-" : escapeHtml(row.admin_id)}</td>`;
+            data += `<td>${escapeHtml(row.action_type)}</td>`;
+            data += `<td>${escapeHtml(row.memo)}</td>`;
+            data += `<td>${row.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>`;
+            data += `</tr>`;
+        }
+        data += `</table>`;
+        admin_html("신고 처리 내역", data, res);
+    } catch (error) {
+        console.error("Error in report_actions_page function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
+// report_evidence_snapshots 조회 화면.
+// content_snapshot_raw는 신고 시점 콘텐츠 원문(개인정보 포함 가능)이라 이 페이지 전체를
+// check_login으로 막아둔 것 외에는 별도 마스킹 없이 그대로 보여줌 — 관리자만 봐야 하는 데이터이므로
+// sql/add_report_evidence_snapshots_table.sql의 "관리자 권한으로만 접근" 요구사항을 라우트 레벨에서 만족시킴.
+// JSON 컬럼(content_snapshot_raw/masked/context_json)은 문자열 또는 이미 파싱된 객체로 들어올 수 있어 안전하게 처리.
+function stringifySnapshotValue(value) {
+    if (value === null || value === undefined) return "-";
+    if (typeof value === "object") return JSON.stringify(value);
+    return String(value);
+}
+
+async function report_evidence_snapshots_page(req, res) {
+    try {
+        let reportId = null;
+        if (req.query.report_id !== undefined) {
+            reportId = parseInt(req.query.report_id, 10);
+            if (isNaN(reportId) || reportId <= 0) {
+                return res.end("<h1>잘못된 요청입니다.</h1>");
+            }
+        }
+
+        const query = knex("report_evidence_snapshots as s")
+            .join("report as r", "r.report_id", "s.report_id")
+            .select(
+                "s.id",
+                "s.report_id",
+                "s.moderation_case_id",
+                "s.target_type",
+                "s.target_subtype",
+                "s.target_id",
+                "s.content_snapshot_raw",
+                "s.content_snapshot_masked",
+                "s.visibility_status_snapshot",
+                "s.hidden_by_report",
+                "s.hidden_by_admin",
+                "s.created_at",
+                "r.reporter_id",
+                "r.reported_id",
+                "r.reason"
+            )
+            .orderBy("s.created_at", "desc");
+        if (reportId !== null) {
+            query.where("s.report_id", reportId);
+        }
+        const rows = await query;
+
+        // 원문(content_snapshot_raw)이 포함된 민감 화면이라 조회 자체를 감사 로그에 남김.
+        await logAdminAction({
+            action: "view_report_evidence_snapshot",
+            target_type: "report",
+            target_id: reportId,
+            detail: reportId === null ? "viewed all snapshots" : null,
+        });
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/moderation_cases">모더레이션 케이스 목록 페이지로</a> <a href="/admin/report_ai_reviews">AI 분석 히스토리 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <h1>신고 증거 스냅샷${reportId !== null ? ` (신고번호 ${escapeHtml(reportId)})` : ""}</h1>
+            <p style="color:#b00">⚠️ 원문(raw)에는 신고 시점 콘텐츠가 그대로 들어있습니다. 관리자 외 공유/캡처에 주의하세요.</p>
+            ${reportId !== null ? `<a href="/admin/report_evidence_snapshots">전체 보기</a><br>` : ""}
+            <table border="1">
+            <tr>
+                <td>스냅샷id</td>
+                <td>신고번호</td>
+                <td>case id</td>
+                <td>대상유형</td>
+                <td>대상id</td>
+                <td>신고자 id</td>
+                <td>신고된 id</td>
+                <td>사유</td>
+                <td>신고시점 노출상태</td>
+                <td>신고로 비노출</td>
+                <td>관리자가 비노출</td>
+                <td>원문(raw, 관리자 전용)</td>
+                <td>마스킹본</td>
+                <td>생성일시</td>
+            </tr>
+        `;
+        for (const row of rows) {
+            data += `<tr>`;
+            data += `<td>${escapeHtml(row.id)}</td>`;
+            data += `<td><a href="/admin/report_evidence_snapshots?report_id=${escapeHtml(row.report_id)}">${escapeHtml(row.report_id)}</a></td>`;
+            data += `<td>${row.moderation_case_id === null ? "-" : escapeHtml(row.moderation_case_id)}</td>`;
+            data += `<td>${escapeHtml(row.target_type)}${row.target_subtype ? " / " + escapeHtml(row.target_subtype) : ""}</td>`;
+            data += `<td>${row.target_id === null ? "-" : escapeHtml(row.target_id)}</td>`;
+            data += `<td>${escapeHtml(row.reporter_id)}</td>`;
+            data += `<td>${escapeHtml(row.reported_id)}</td>`;
+            data += `<td>${escapeHtml(row.reason)}</td>`;
+            data += `<td>${escapeHtml(row.visibility_status_snapshot)}</td>`;
+            data += `<td>${row.hidden_by_report ? "Y" : "N"}</td>`;
+            data += `<td>${row.hidden_by_admin ? "Y" : "N"}</td>`;
+            data += `<td><pre style="max-width:320px;white-space:pre-wrap;">${escapeHtml(stringifySnapshotValue(row.content_snapshot_raw))}</pre></td>`;
+            data += `<td><pre style="max-width:320px;white-space:pre-wrap;">${escapeHtml(stringifySnapshotValue(row.content_snapshot_masked))}</pre></td>`;
+            data += `<td>${row.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>`;
+            data += `</tr>`;
+        }
+        data += `</table>`;
+        admin_html("신고 증거 스냅샷", data, res);
+    } catch (error) {
+        console.error("Error in report_evidence_snapshots_page function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
+// admin_audit_logs 조회 화면. target_type/target_id로 필터 가능, 최신 300건만 표시(전체 스캔 방지).
+async function admin_audit_logs_page(req, res) {
+    try {
+        const targetType = req.query.target_type ? String(req.query.target_type).slice(0, 30) : null;
+        const targetId = req.query.target_id !== undefined && req.query.target_id !== ""
+            ? String(req.query.target_id).slice(0, 50)
+            : null;
+
+        const query = knex("admin_audit_logs")
+            .select("id", "admin_id", "action", "target_type", "target_id", "detail", "created_at")
+            .orderBy("created_at", "desc")
+            .limit(300);
+        if (targetType) {
+            query.where("target_type", targetType);
+        }
+        if (targetId !== null) {
+            query.where("target_id", targetId);
+        }
+        const rows = await query;
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/moderation_cases">모더레이션 케이스 목록 페이지로</a> <a href="/admin/report_ai_reviews">AI 분석 히스토리 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <h1>어드민 감사 로그 (최신 300건)</h1>
+            <form method="get" action="/admin/audit_logs" style="margin-bottom:8px;">
+                <input type="text" name="target_type" placeholder="target_type (예: report)" value="${escapeHtml(targetType || "")}"/>
+                <input type="text" name="target_id" placeholder="target_id" value="${escapeHtml(targetId || "")}"/>
+                <input type="submit" value="필터"/>
+                <a href="/admin/audit_logs">초기화</a>
+            </form>
+            <table border="1">
+            <tr>
+                <td>id</td>
+                <td>admin_id</td>
+                <td>action</td>
+                <td>target_type</td>
+                <td>target_id</td>
+                <td>detail</td>
+                <td>일시</td>
+            </tr>
+        `;
+        for (const row of rows) {
+            data += `<tr>
+                <td>${escapeHtml(row.id)}</td>
+                <td>${row.admin_id === null ? "-" : escapeHtml(row.admin_id)}</td>
+                <td>${escapeHtml(row.action)}</td>
+                <td>${row.target_type === null ? "-" : escapeHtml(row.target_type)}</td>
+                <td>${row.target_id === null ? "-" : escapeHtml(row.target_id)}</td>
+                <td>${escapeHtml(row.detail)}</td>
+                <td>${row.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
+            </tr>`;
+        }
+        data += `</table>`;
+        admin_html("어드민 감사 로그", data, res);
+    } catch (error) {
+        console.error("Error in admin_audit_logs_page function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
+// moderation_cases 목록 화면. 기존에는 GET /cases/:caseId(moderation.js, requireAdmin API 키)로
+// case id를 미리 알아야만 단건 조회가 가능했음 — case id를 몰라도 전체를 훑어볼 수 있는 화면이 목적.
+// moderation.js의 requireAdmin(API 키) 대신 admin.js의 cookie 인증을 그대로 사용(다른 admin.js 화면과 통일).
+const MODERATION_CASE_STATUSES = ["pending", "reviewing", "resolved", "dismissed"];
+async function moderation_cases_page(req, res) {
+    try {
+        const status = req.query.status ? String(req.query.status) : null;
+        if (status !== null && !MODERATION_CASE_STATUSES.includes(status)) {
+            return res.end("<h1>잘못된 요청입니다.</h1>");
+        }
+
+        const reportCountSubquery = knex("moderation_case_reports")
+            .select("moderation_case_id")
+            .count("report_id as report_count")
+            .groupBy("moderation_case_id")
+            .as("rc");
+
+        const query = knex("moderation_cases as mc")
+            .leftJoin(reportCountSubquery, "rc.moderation_case_id", "mc.id")
+            .select(
+                "mc.id",
+                "mc.target_type",
+                "mc.target_subtype",
+                "mc.target_id",
+                "mc.status",
+                "mc.admin_id",
+                "mc.created_at",
+                "mc.updated_at",
+                "mc.resolved_at",
+                knex.raw("COALESCE(rc.report_count, 0) as report_count")
+            )
+            .orderBy("mc.created_at", "desc")
+            .limit(300);
+        if (status !== null) {
+            query.where("mc.status", status);
+        }
+        const rows = await query;
+
+        let statusOptions = `<option value="">전체</option>`;
+        for (const s of MODERATION_CASE_STATUSES) {
+            statusOptions += `<option value="${s}"${status === s ? " selected" : ""}>${s}</option>`;
+        }
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/report_ai_reviews">AI 분석 히스토리 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <h1>모더레이션 케이스 목록 (최신 300건)</h1>
+            <form method="get" action="/admin/moderation_cases" style="margin-bottom:8px;">
+                <select name="status">${statusOptions}</select>
+                <input type="submit" value="필터"/>
+                <a href="/admin/moderation_cases">초기화</a>
+            </form>
+            <table border="1">
+            <tr>
+                <td>case id</td>
+                <td>대상유형</td>
+                <td>대상id</td>
+                <td>상태</td>
+                <td>연결된 신고 수</td>
+                <td>처리자(admin_id)</td>
+                <td>생성일</td>
+                <td>수정일</td>
+                <td>해결일</td>
+                <td>AI 분석 히스토리</td>
+            </tr>
+        `;
+        for (const row of rows) {
+            data += `<tr>
+                <td>${escapeHtml(row.id)}</td>
+                <td>${escapeHtml(row.target_type)}${row.target_subtype ? " / " + escapeHtml(row.target_subtype) : ""}</td>
+                <td>${row.target_id === null ? "-" : escapeHtml(row.target_id)}</td>
+                <td>${escapeHtml(row.status)}</td>
+                <td>${escapeHtml(row.report_count)}</td>
+                <td>${row.admin_id === null ? "-" : escapeHtml(row.admin_id)}</td>
+                <td>${row.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
+                <td>${row.updated_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
+                <td>${row.resolved_at ? row.resolved_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "-"}</td>
+                <td><a href="/admin/report_ai_reviews?moderation_case_id=${escapeHtml(row.id)}">히스토리 보기</a></td>
+            </tr>`;
+        }
+        data += `</table>`;
+        admin_html("모더레이션 케이스 목록", data, res);
+    } catch (error) {
+        console.error("Error in moderation_cases_page function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
+// report_ai_reviews 히스토리 조회 화면.
+// 기존에는 case 단건 조회 시 최신 리뷰 1개만 같이 나와서(moderation.js GET /cases/:caseId) 시점별
+// 분석 결과 변화를 볼 방법이 없었음. moderation_case_id로 필터링하면 해당 case의 전체 히스토리,
+// 없으면 전체 케이스의 최근 리뷰를 최신순으로 보여줌.
+// AI 분석 자체는 아직 mock(moderation.js 17행 참고)이라 데이터 내용은 실제 분석이 아님.
+async function report_ai_reviews_page(req, res) {
+    try {
+        let caseId = null;
+        if (req.query.moderation_case_id !== undefined) {
+            caseId = parseInt(req.query.moderation_case_id, 10);
+            if (isNaN(caseId) || caseId <= 0) {
+                return res.end("<h1>잘못된 요청입니다.</h1>");
+            }
+        }
+
+        const query = knex("report_ai_reviews as rev")
+            .select(
+                "rev.id",
+                "rev.moderation_case_id",
+                "rev.policy_version",
+                "rev.prompt_version",
+                "rev.triage_result_json",
+                "rev.analysis_result_json",
+                "rev.risk_level",
+                "rev.case_family",
+                "rev.primary_case_type",
+                "rev.recommended_queue",
+                "rev.recommended_action",
+                "rev.severity_level",
+                "rev.confidence",
+                "rev.context_expansion_needed",
+                "rev.created_at"
+            )
+            .orderBy("rev.created_at", "desc")
+            .limit(300);
+        if (caseId !== null) {
+            query.where("rev.moderation_case_id", caseId);
+        }
+        const rows = await query;
+
+        let data = `
+            <a href="/admin/logout">logout </a> <a href="/admin/member">회원관리 페이지로</a> <a href="/admin/post">글 현황 페이지로</a> <a href="/admin/setblock">신고 목록 페이지로</a> <a href="/admin/report_actions">신고 처리 내역 페이지로</a> <a href="/admin/report_evidence_snapshots">신고 증거 스냅샷 페이지로</a> <a href="/admin/audit_logs">어드민 감사 로그 페이지로</a> <a href="/admin/moderation_cases">모더레이션 케이스 목록 페이지로</a> <a href="/admin/first_activity">첫 글/첫 반응 시각 페이지로</a> <a href="/admin/session_count">일별 세션 횟수 페이지로</a> <a href="/admin/admin_message">어드민 메시지 페이지로</a> <a href="/admin/app_launch_count">앱 실행 횟수 페이지로</a><br>
+            <h1>AI 분석 히스토리${caseId !== null ? ` (case id ${escapeHtml(caseId)})` : " (최신 300건)"}</h1>
+            <p>※ AI 분석은 아직 mock 데이터입니다 (실제 외부 AI 호출 없음).</p>
+            ${caseId !== null ? `<a href="/admin/report_ai_reviews">전체 보기</a><br>` : ""}
+            <table border="1">
+            <tr>
+                <td>리뷰id</td>
+                <td>case id</td>
+                <td>정책버전</td>
+                <td>프롬프트버전</td>
+                <td>risk_level</td>
+                <td>case_family</td>
+                <td>primary_case_type</td>
+                <td>recommended_queue</td>
+                <td>recommended_action</td>
+                <td>severity_level</td>
+                <td>confidence</td>
+                <td>맥락확장필요</td>
+                <td>triage 결과</td>
+                <td>분석 결과</td>
+                <td>생성일시</td>
+            </tr>
+        `;
+        for (const row of rows) {
+            data += `<tr>
+                <td>${escapeHtml(row.id)}</td>
+                <td><a href="/admin/report_ai_reviews?moderation_case_id=${escapeHtml(row.moderation_case_id)}">${escapeHtml(row.moderation_case_id)}</a></td>
+                <td>${escapeHtml(row.policy_version)}</td>
+                <td>${escapeHtml(row.prompt_version)}</td>
+                <td>${row.risk_level === null ? "-" : escapeHtml(row.risk_level)}</td>
+                <td>${row.case_family === null ? "-" : escapeHtml(row.case_family)}</td>
+                <td>${row.primary_case_type === null ? "-" : escapeHtml(row.primary_case_type)}</td>
+                <td>${row.recommended_queue === null ? "-" : escapeHtml(row.recommended_queue)}</td>
+                <td>${row.recommended_action === null ? "-" : escapeHtml(row.recommended_action)}</td>
+                <td>${row.severity_level === null ? "-" : escapeHtml(row.severity_level)}</td>
+                <td>${row.confidence === null ? "-" : escapeHtml(row.confidence)}</td>
+                <td>${row.context_expansion_needed ? "Y" : "N"}</td>
+                <td><pre style="max-width:260px;white-space:pre-wrap;">${escapeHtml(stringifySnapshotValue(row.triage_result_json))}</pre></td>
+                <td><pre style="max-width:260px;white-space:pre-wrap;">${escapeHtml(stringifySnapshotValue(row.analysis_result_json))}</pre></td>
+                <td>${row.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
+            </tr>`;
+        }
+        data += `</table>`;
+        admin_html("AI 분석 히스토리", data, res);
+    } catch (error) {
+        console.error("Error in report_ai_reviews_page function:", error);
+        res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
 
 async function member(res) {
     try {
@@ -515,6 +973,13 @@ async function send_admin_message(req, res) {
             await knex("admin_messages").insert(insertRows);
         }
 
+        await logAdminAction({
+            action: "send_admin_message",
+            target_type: "admin_message",
+            target_id: group_id,
+            detail: `title=${title}, target_count=${targetIds.length}`,
+        });
+
         res.redirect("/admin/admin_message");
     } catch (error) {
         console.error("Error in send_admin_message function:", error);
@@ -692,6 +1157,41 @@ router.post("/admin_message", (req, res) => {
 });
 router.get("/app_launch_count", (req, res) => {
     check_login(app_launch_count(res), req, res);
+});
+// 다른 라우트와 달리 인자를 먼저 평가해 호출하는 check_login(fn(), ...) 패턴을 쓰지 않음.
+// 그 패턴은 fn()이 cookie 체크 전에 이미 실행돼버리는 기존 버그가 있어(추후 admin.js 개편 시 정리 예정),
+// 신규 라우트에서는 반복하지 않고 cookie 체크를 먼저 한 뒤에만 핸들러를 호출함.
+router.get("/report_actions", (req, res) => {
+    if (!req.headers.cookie) {
+        return res.redirect("/admin");
+    }
+    report_actions_page(req, res);
+});
+// content_snapshot_raw(신고 시점 원문)를 보여주는 민감한 화면이라 cookie 체크를 핸들러 호출보다
+// 먼저 평가하는 패턴을 report_actions와 동일하게 사용 — check_login(fn(), ...) 패턴은 쓰지 않음.
+router.get("/report_evidence_snapshots", (req, res) => {
+    if (!req.headers.cookie) {
+        return res.redirect("/admin");
+    }
+    report_evidence_snapshots_page(req, res);
+});
+router.get("/audit_logs", (req, res) => {
+    if (!req.headers.cookie) {
+        return res.redirect("/admin");
+    }
+    admin_audit_logs_page(req, res);
+});
+router.get("/moderation_cases", (req, res) => {
+    if (!req.headers.cookie) {
+        return res.redirect("/admin");
+    }
+    moderation_cases_page(req, res);
+});
+router.get("/report_ai_reviews", (req, res) => {
+    if (!req.headers.cookie) {
+        return res.redirect("/admin");
+    }
+    report_ai_reviews_page(req, res);
 });
 router.get("/session_stats", (req, res) => {
     check_login(session_stats(res), req, res);
