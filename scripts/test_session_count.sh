@@ -1,14 +1,13 @@
 #!/bin/bash
 # /admin/session_count 페이지 검증 스크립트
-# 사용법: ./scripts/test_session_count.sh [base_url]
+# 사용법: ADMIN_EMAIL=... ADMIN_PASSWORD=... ./scripts/test_session_count.sh [base_url]
 #
-# .env의 admin 비밀번호(passwd)를 코드에 직접 적지 않고 .env에서 읽어와 사용합니다.
-# .env 파일 자체나 그 내용을 출력하지 않도록 주의해서 작성했습니다.
+# 개별 어드민 로그인(JWT) 도입 이후로는 .env의 공용 비밀번호가 아니라
+# scripts/create_admin.js로 발급한 계정의 이메일/비밀번호를 환경변수로 넘겨받아 로그인합니다.
 
 set -euo pipefail
 
 BASE_URL="${1:-http://localhost:9300}"
-ENV_FILE=".env"
 COOKIE_FILE="$(mktemp)"
 
 cleanup() {
@@ -16,21 +15,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [ ! -f "$ENV_FILE" ]; then
-    echo "[FAIL] $ENV_FILE 을 찾을 수 없습니다. deeptalk-backend 루트에서 실행해주세요."
-    exit 1
-fi
-
-ADMIN_PASSWD="$(grep -E '^passwd=' "$ENV_FILE" | head -n1 | cut -d'=' -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e "s/^['\"]//" -e "s/['\"]\$//")"
-
-if [ -z "$ADMIN_PASSWD" ]; then
-    echo "[FAIL] .env에서 passwd 값을 찾지 못했습니다."
+if [ -z "${ADMIN_EMAIL:-}" ] || [ -z "${ADMIN_PASSWORD:-}" ]; then
+    echo "[FAIL] ADMIN_EMAIL, ADMIN_PASSWORD 환경변수를 설정해주세요."
+    echo "       예: ADMIN_EMAIL=me@example.com ADMIN_PASSWORD=... ./scripts/test_session_count.sh"
     exit 1
 fi
 
 echo "=== /admin/login ==="
 login_response=$(curl -s -D - -o /dev/null -X POST "$BASE_URL/admin/login" \
-    --data-urlencode "passwd=$ADMIN_PASSWD" \
+    --data-urlencode "email=$ADMIN_EMAIL" \
+    --data-urlencode "password=$ADMIN_PASSWORD" \
     -c "$COOKIE_FILE")
 login_location=$(echo "$login_response" | grep -i '^location:' | tr -d '\r')
 echo "$login_location"
@@ -38,11 +32,11 @@ echo "$login_location"
 if echo "$login_location" | grep -qi '/admin/member'; then
     echo "[OK] 로그인 성공 (member 페이지로 리다이렉트됨)"
 elif echo "$login_location" | grep -qi '^location:[[:space:]]*/admin[[:space:]]*$\|^location:[[:space:]]*/admin$'; then
-    echo "[FAIL] 로그인 실패: 비밀번호가 process.env.passwd와 일치하지 않습니다."
+    echo "[FAIL] 로그인 실패: 이메일/비밀번호를 확인해주세요."
     exit 1
 fi
 
-if ! grep -qi "connect.id" "$COOKIE_FILE" 2>/dev/null; then
+if ! grep -qi "admin_token" "$COOKIE_FILE" 2>/dev/null; then
     echo "[FAIL] 로그인 쿠키를 받지 못했습니다. (Location: $login_location)"
     exit 1
 fi

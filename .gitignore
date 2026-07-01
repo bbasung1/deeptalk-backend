@@ -83,6 +83,9 @@ web_modules/
 *firebase-adminsdk*.json
 serviceAccountKey.json
 
+# 어드민 계정 발급/비밀번호 재설정 스크립트 (절대 커밋 금지 — 운영 계정 발급 도구이므로 로컬에만 둔다)
+scripts/create_admin.js
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache

@@ -33,6 +33,7 @@ app.use("/oauth", require("./oauth.js"));
 app.use("/comment", require("./comment.js"));
 app.use("/profile", require("./profile.js"));
 app.use("/admin", require("./admin.js"));
+app.use("/admin/api", require("./admin_api.js"));
 app.use("/jin-talk", require("./think.js"));
 app.use("/jam-talk", require("./talk.js"));
 app.use("/search", require("./search.js"));

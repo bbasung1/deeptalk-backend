@@ -2,22 +2,28 @@ const express = require("express");
 const router = express.Router();
 const knex = require("./knex.js");
 const dotenv = require("dotenv");
+const bcrypt = require("bcrypt");
+const { rateLimit } = require("express-rate-limit");
 dotenv.config();
-const session = [];
 
-// session[] 배열과 실제로 대조하는 세션 검증 함수.
-// check_login()은 cookie 존재 여부만 확인하고 session[]을 검증하지 않는 기존 버그가 있음.
-// 신규 라우트에서는 이 함수를 사용해 로그아웃 후 세션 무효화가 실제로 동작하도록 함.
-function isValidSession(req) {
-    if (!req.headers.cookie) return false;
-    const match = req.headers.cookie
-        .split(";")
-        .map(c => c.trim())
-        .find(c => c.startsWith("connect.id="));
-    if (!match) return false;
-    const sessionId = Number(match.slice("connect.id=".length));
-    return session.includes(sessionId);
-}
+// 인증 로직은 admin_api.js(신규 React용 JSON API)와 공유하므로 utils/adminAuth.js로 분리되어 있다.
+const {
+    ADMIN_COOKIE_NAME,
+    requireAdmin,
+    issueAdminSession,
+    revokeAdminToken,
+    getTokenFromCookie: getAdminTokenFromCookie,
+} = require("./utils/adminAuth.js");
+
+// 로그인 브루트포스 방어. IP당 15분에 10회로 제한 — 비밀번호 대량 시도를 막는 게 목적이라
+// 정상적인 재시도(오타 등)는 넉넉하게 허용하는 수준으로 잡음.
+const loginRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.",
+});
 
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -116,13 +122,13 @@ function escapeHtml(value) {
 }
 
 // 어드민 운영 행위 감사 로그(admin_audit_logs) 기록 헬퍼.
-// admin.js는 아직 개별 관리자 로그인이 없어 admin_id는 항상 NULL(개편 시 연결 예정, sql/add_admin_audit_logs_table.sql 참고).
+// adminId는 호출부에서 req.admin.id를 넘겨준다(개별 관리자 로그인 도입 완료, sql/add_admin_audit_logs_table.sql 참고).
 // detail에는 비밀번호/토큰 등 민감정보를 절대 넣지 말 것 — 이 함수를 호출하는 곳에서 직접 주의해야 함.
 // 감사 로그 기록 실패가 본래 동작(신고 처리, 메시지 발송 등)을 막아서는 안 되므로 에러는 흡수만 함.
-async function logAdminAction({ action, target_type = null, target_id = null, detail = null }) {
+async function logAdminAction({ adminId = null, action, target_type = null, target_id = null, detail = null }) {
     try {
         await knex("admin_audit_logs").insert({
-            admin_id: null,
+            admin_id: adminId,
             action,
             target_type,
             target_id: target_id === null || target_id === undefined ? null : String(target_id),
@@ -134,9 +140,10 @@ async function logAdminAction({ action, target_type = null, target_id = null, de
 }
 
 // 신고 처리 상태 변경 + 처리 내역(report_actions) 기록.
-// admin.js는 개별 관리자 로그인이 없어 admin_id는 NULL로 기록함(개편 시 연결 예정).
 // report.status는 처리 라이프사이클만 담당 (sql/alter_report_status_enum_v2.sql 참고).
 // report.resolution_type은 "처리 결과가 무엇이었나"를 담당 (sql/alter_report_add_resolution_type_column.sql 참고).
+// "어떻게 처리됐는지"는 report_actions.action_type에 그대로 기록되므로 정보 손실 없음.
+// admin_id는 req.admin(JWT 인증, utils/adminAuth.js의 requireAdmin)에서 가져온다.
 const REPORT_ACTION_TO_STATUS = {
     notice: "resolved",
     warning: "resolved",
@@ -188,7 +195,7 @@ async function update_report_status(req, res) {
             await trx("report").where("report_id", report_id).update(reportUpdate);
             await trx("report_actions").insert({
                 report_id,
-                admin_id: null,
+                admin_id: req.admin.id,
                 action_type,
                 memo: memo || null,
             });
@@ -198,6 +205,7 @@ async function update_report_status(req, res) {
             throw err;
         }
         await logAdminAction({
+            adminId: req.admin.id,
             action: "report_status_change",
             target_type: "report",
             target_id: report_id,
@@ -288,7 +296,7 @@ async function report_actions_page(req, res) {
 
 // report_evidence_snapshots 조회 화면.
 // content_snapshot_raw는 신고 시점 콘텐츠 원문(개인정보 포함 가능)이라 이 페이지 전체를
-// check_login으로 막아둔 것 외에는 별도 마스킹 없이 그대로 보여줌 — 관리자만 봐야 하는 데이터이므로
+// requireAdmin으로 막아둔 것 외에는 별도 마스킹 없이 그대로 보여줌 — 관리자만 봐야 하는 데이터이므로
 // sql/add_report_evidence_snapshots_table.sql의 "관리자 권한으로만 접근" 요구사항을 라우트 레벨에서 만족시킴.
 // JSON 컬럼(content_snapshot_raw/masked/context_json)은 문자열 또는 이미 파싱된 객체로 들어올 수 있어 안전하게 처리.
 function stringifySnapshotValue(value) {
@@ -334,6 +342,7 @@ async function report_evidence_snapshots_page(req, res) {
 
         // 원문(content_snapshot_raw)이 포함된 민감 화면이라 조회 자체를 감사 로그에 남김.
         await logAdminAction({
+            adminId: req.admin.id,
             action: "view_report_evidence_snapshot",
             target_type: "report",
             target_id: reportId,
@@ -779,6 +788,7 @@ async function update_user_status(req, res) {
         });
 
         logAdminAction({
+            adminId: req.admin.id,
             action: "UPDATE_USER_STATUS",
             target_type: "user",
             target_id: userId,
@@ -1061,7 +1071,7 @@ async function admin_message_page(res) {
 // target_user_id=해당 유저)으로 저장한다. 여러 명을 한 번에 보낼 경우 옛 설계처럼 대상마다
 // 행을 미리 깔던 것과 달리, 여기서는 대상자 수만큼 "개별 메시지" 행을 만든다 — 어차피 대상이
 // 적은(1:1 위주) 케이스라 행 수가 폭증하지 않고, 노션 스펙의 admin_messages/admin_message_reads
-// 분리 구조를 그대로 따른다. admin_id는 admin.js가 개별 관리자 로그인을 아직 지원하지 않아 NULL.
+// 분리 구조를 그대로 따른다.
 async function send_admin_message(req, res) {
     try {
         const target = (req.body.target || "").trim();
@@ -1072,14 +1082,19 @@ async function send_admin_message(req, res) {
             return res.end("<h1>대상/제목/내용을 모두 입력해주세요.</h1>");
         }
 
+        let firstInsertedId;
+        let targetCount;
+
         if (target.toLowerCase() === "all") {
-            await knex("admin_messages").insert({
-                admin_id: null,
+            const [insertedId] = await knex("admin_messages").insert({
+                admin_id: req.admin.id,
                 title,
                 content: body,
                 target_type: "all",
                 target_user_id: null,
             });
+            firstInsertedId = insertedId;
+            targetCount = 1;
         } else {
             // profile.user_id(표시용 아이디) 기준으로 입력받아 내부 id로 변환
             const displayIds = target.split(",").map((s) => s.trim()).filter(Boolean);
@@ -1095,20 +1110,23 @@ async function send_admin_message(req, res) {
             }
 
             const insertRows = targetIds.map((target_user_id) => ({
-                admin_id: null,
+                admin_id: req.admin.id,
                 title,
                 content: body,
                 target_type: "individual",
                 target_user_id,
             }));
-            await knex("admin_messages").insert(insertRows);
+            const [insertedId] = await knex("admin_messages").insert(insertRows);
+            firstInsertedId = insertedId;
+            targetCount = targetIds.length;
         }
 
         await logAdminAction({
+            adminId: req.admin.id,
             action: "send_admin_message",
             target_type: "admin_message",
-            target_id: group_id,
-            detail: `title=${title}, target_count=${targetIds.length}`,
+            target_id: firstInsertedId,
+            detail: `title=${title}, target_count=${targetCount}`,
         });
 
         res.redirect("/admin/admin_message");
@@ -1224,101 +1242,70 @@ async function session_stats(res) {
 function login(res) {
     let data = `
   <form method="post" action="/admin/login">
-  <label>passwd:</label>
-  <input type="password" name="passwd"/>
+  <label>email:</label>
+  <input type="email" name="email" required/>
+  <label>password:</label>
+  <input type="password" name="password" required/>
   <input type="submit" value="login"/>
   </form>
   `;
     admin_html("로그인", data, res);
 }
-function check_login(genfunc, req, res) {
-    if (req.headers.cookie) {
-        genfunc;
-    } else {
-        res.redirect("/admin");
-    }
-}
-function logout(req, res) {
-    const [, privatekey] = req.headers.cookie.split("=");
-    temp = session.findIndex((v) => v == privatekey);
-    session.splice(temp, 1);
-    res.setHeader("Set-Cookie", "connect.id=delete;Max-age=0;");
+async function logout(req, res) {
+    await revokeAdminToken(getAdminTokenFromCookie(req));
+    res.setHeader("Set-Cookie", `${ADMIN_COOKIE_NAME}=deleted; Max-Age=0; Path=/; SameSite=Strict${req.secure ? "; Secure" : ""}`);
     res.redirect("/admin");
 }
 router.get("/", (req, res) => {
     login(res);
 });
-router.post("/login", (req, res) => {
-    const temp = req.body.passwd == process.env.passwd;
-    if (temp) {
-        const privatekey = Math.floor(Math.random() * 1000000);
-        session.push(privatekey);
-        res.setHeader("Set-Cookie", `connect.id=${privatekey}`);
+// SYS-001 진입 경로
+router.get("/login", (req, res) => {
+    login(res);
+});
+router.post("/login", loginRateLimiter, async (req, res) => {
+    try {
+        const email = (req.body.email || "").trim();
+        const password = req.body.password || "";
+        if (!email || !password) return res.redirect("/admin");
+
+        const admin = await knex("admins").where({ email, is_active: 1 }).first();
+        if (!admin || !admin.password_hash) return res.redirect("/admin");
+
+        const ok = await bcrypt.compare(password, admin.password_hash);
+        if (!ok) return res.redirect("/admin");
+
+        const token = await issueAdminSession(admin);
+        // SameSite=Strict: 이 쿠키는 admin.js 자체 내 이동에서만 쓰이므로 크로스사이트로 보낼 일이 없음.
+        // Secure는 실제 TLS 연결(req.secure)일 때만 붙인다 — 로컬 개발용 평문 HTTP 서버(scripts/dev_admin_server.js)에서는
+        // Secure 쿠키를 브라우저가 저장/전송하지 않아 로그인이 막히기 때문.
+        res.setHeader(
+            "Set-Cookie",
+            `${ADMIN_COOKIE_NAME}=${token}; HttpOnly; SameSite=Strict; Path=/${req.secure ? "; Secure" : ""}`
+        );
         res.redirect("/admin/member");
-    } else {
+    } catch (error) {
+        console.error("Error in admin login:", error);
         res.redirect("/admin");
     }
 });
-router.get("/setblock", (req, res) => {
-    check_login(admin_block(res), req, res);
-});
-router.post("/setblock/status", (req, res) => {
-    check_login(update_report_status(req, res), req, res);
-});
-router.get("/logout", (req, res) => {
-    check_login(logout(req, res), req, res);
-});
-router.get("/member", (req, res) => {
-    check_login(member(res), req, res);
-});
-router.post("/member/status", (req, res) => {
-    if (!isValidSession(req)) return res.redirect("/admin");
-    update_user_status(req, res);
-});
-router.get("/post", (req, res) => {
-    check_login(post(res), req, res);
-});
-router.get("/first_activity", (req, res) => {
-    check_login(first_activity(res), req, res);
-});
-router.get("/session_count", (req, res) => {
-    check_login(session_count(res), req, res);
-});
-router.get("/admin_message", (req, res) => {
-    check_login(admin_message_page(res), req, res);
-});
-router.post("/admin_message", (req, res) => {
-    check_login(send_admin_message(req, res), req, res);
-});
-router.get("/app_launch_count", (req, res) => {
-    check_login(app_launch_count(res), req, res);
-});
-// 다른 라우트와 달리 인자를 먼저 평가해 호출하는 check_login(fn(), ...) 패턴을 쓰지 않음.
-// 그 패턴은 fn()이 cookie 체크 전에 이미 실행돼버리는 기존 버그가 있어(추후 admin.js 개편 시 정리 예정),
-// 신규 라우트에서는 반복하지 않고 cookie 체크를 먼저 한 뒤에만 핸들러를 호출함.
-router.get("/report_actions", (req, res) => {
-    if (!isValidSession(req)) return res.redirect("/admin");
-    report_actions_page(req, res);
-});
-router.get("/report_evidence_snapshots", (req, res) => {
-    if (!isValidSession(req)) return res.redirect("/admin");
-    report_evidence_snapshots_page(req, res);
-});
-router.get("/audit_logs", (req, res) => {
-    if (!isValidSession(req)) return res.redirect("/admin");
-    admin_audit_logs_page(req, res);
-});
-router.get("/moderation_cases", (req, res) => {
-    if (!isValidSession(req)) return res.redirect("/admin");
-    moderation_cases_page(req, res);
-});
-router.get("/report_ai_reviews", (req, res) => {
-    if (!isValidSession(req)) return res.redirect("/admin");
-    report_ai_reviews_page(req, res);
-});
-router.get("/session_stats", (req, res) => {
-    check_login(session_stats(res), req, res);
-});
+router.get("/setblock", requireAdmin((req, res) => admin_block(res)));
+router.post("/setblock/status", requireAdmin((req, res) => update_report_status(req, res)));
+router.get("/logout", requireAdmin((req, res) => logout(req, res)));
+router.get("/member", requireAdmin((req, res) => member(res)));
+router.post("/member/status", requireAdmin((req, res) => update_user_status(req, res)));
+router.get("/post", requireAdmin((req, res) => post(res)));
+router.get("/first_activity", requireAdmin((req, res) => first_activity(res)));
+router.get("/session_count", requireAdmin((req, res) => session_count(res)));
+router.get("/admin_message", requireAdmin((req, res) => admin_message_page(res)));
+router.post("/admin_message", requireAdmin((req, res) => send_admin_message(req, res)));
+router.get("/app_launch_count", requireAdmin((req, res) => app_launch_count(res)));
+router.get("/report_actions", requireAdmin((req, res) => report_actions_page(req, res)));
+router.get("/report_evidence_snapshots", requireAdmin((req, res) => report_evidence_snapshots_page(req, res)));
+router.get("/audit_logs", requireAdmin((req, res) => admin_audit_logs_page(req, res)));
+router.get("/moderation_cases", requireAdmin((req, res) => moderation_cases_page(req, res)));
+router.get("/report_ai_reviews", requireAdmin((req, res) => report_ai_reviews_page(req, res)));
+router.get("/session_stats", requireAdmin((req, res) => session_stats(res)));
 
 // ─── 신규 조회 화면 함수들 ────────────────────────────────────────────────
 // 공통 nav 바 — 새 화면에만 사용 (기존 화면 nav는 각자 하드코딩되어 있음)
@@ -1515,26 +1502,11 @@ async function admin_fcm_tokens_page(req, res) {
     }
 }
 
-// ─── 신규 조회 화면 라우트 (쿠키 선체크 패턴 적용) ───────────────────────
-router.get("/comments", (req, res) => {
-    if (!isValidSession(req)) return res.redirect("/admin");
-    admin_comments_page(req, res);
-});
-router.get("/quotes", (req, res) => {
-    if (!isValidSession(req)) return res.redirect("/admin");
-    admin_quotes_page(req, res);
-});
-router.get("/reactions", (req, res) => {
-    if (!isValidSession(req)) return res.redirect("/admin");
-    admin_reactions_page(req, res);
-});
-router.get("/blocks", (req, res) => {
-    if (!isValidSession(req)) return res.redirect("/admin");
-    admin_blocks_page(req, res);
-});
-router.get("/fcm_tokens", (req, res) => {
-    if (!isValidSession(req)) return res.redirect("/admin");
-    admin_fcm_tokens_page(req, res);
-});
+// ─── 신규 조회 화면 라우트 ────────────────────────────────────────────────
+router.get("/comments", requireAdmin((req, res) => admin_comments_page(req, res)));
+router.get("/quotes", requireAdmin((req, res) => admin_quotes_page(req, res)));
+router.get("/reactions", requireAdmin((req, res) => admin_reactions_page(req, res)));
+router.get("/blocks", requireAdmin((req, res) => admin_blocks_page(req, res)));
+router.get("/fcm_tokens", requireAdmin((req, res) => admin_fcm_tokens_page(req, res)));
 
 module.exports = router;
