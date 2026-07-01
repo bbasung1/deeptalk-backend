@@ -518,7 +518,8 @@ router.delete("/:comment_id", async (req, res) => {
         const TargetTable = comment_data.type === 0 ? "talk" : "think";
         const postColumn = comment_data.type === 0 ? "talk_num" : "think_num";
         // 하드 삭제(.delete()) 대신 deleted_at을 채우는 소프트 삭제로 전환.
-        await knex("comment").where("comment_num", req.params.comment_id).update({ deleted_at: knex.fn.now() });
+        // visibility_status도 동시 업데이트 (alter_add_visibility_status_columns.sql 참고).
+        await knex("comment").where("comment_num", req.params.comment_id).update({ deleted_at: knex.fn.now(), visibility_status: "deleted_by_user" });
         if (comment_data.draft === 0) {
             await knex(TargetTable).where(postColumn, comment_data.post_num).decrement("comment", 1);
         }

@@ -75,24 +75,25 @@ async function linkReportToCase(trx, { moderation_case_id, report_id }) {
 }
 
 // target_subtype 기준으로 신고 시점 원본 콘텐츠 조회 (스냅샷용).
+// visibility_status는 스냅샷 컬럼(visibility_status_snapshot)에 별도 저장하기 위해 함께 조회.
 async function fetchOriginalContent(trx, { target_subtype, target_id }) {
     if (!target_id) return null;
     if (target_subtype === "talk") {
         return trx("talk")
             .where("talk_num", target_id)
-            .select("talk_num", "writer_id", "header", "subject", "timestamp")
+            .select("talk_num", "writer_id", "header", "subject", "timestamp", "visibility_status")
             .first();
     }
     if (target_subtype === "think") {
         return trx("think")
             .where("think_num", target_id)
-            .select("think_num", "writer_id", "header", "subject", "timestamp")
+            .select("think_num", "writer_id", "header", "subject", "timestamp", "visibility_status")
             .first();
     }
     if (target_subtype === "comment") {
         return trx("comment")
             .where("comment_num", target_id)
-            .select("comment_num", "writer_id", "subject", "timestamp")
+            .select("comment_num", "writer_id", "subject", "timestamp", "visibility_status")
             .first();
     }
     if (target_subtype === "user_account" || target_subtype === "profile") {
@@ -132,17 +133,22 @@ async function captureEvidenceSnapshot(trx, { report_id, moderation_case_id, tar
     const rawContent = await fetchOriginalContent(trx, { target_subtype, target_id });
     if (!rawContent) return null;
 
-    const maskedContent = buildMaskedSnapshot(rawContent);
+    // visibility_status는 스냅샷 전용 컬럼에 저장하고 content JSON에서는 제외.
+    // user_account/profile은 visibility_status가 없으므로 undefined → 기본값 "visible" 처리.
+    const { visibility_status: contentVisibility, ...contentOnly } = rawContent;
+    const visibilitySnapshot = contentVisibility ?? "visible";
+
+    const maskedContent = buildMaskedSnapshot(contentOnly);
     const [snapshotId] = await trx("report_evidence_snapshots").insert({
         report_id,
         moderation_case_id,
         target_type,
         target_subtype,
         target_id,
-        content_snapshot_raw: JSON.stringify(rawContent),
+        content_snapshot_raw: JSON.stringify(contentOnly),
         content_snapshot_masked: JSON.stringify(maskedContent),
         context_json: JSON.stringify({ target_type, target_subtype, target_id }),
-        visibility_status_snapshot: "visible",
+        visibility_status_snapshot: visibilitySnapshot,
     });
     return snapshotId;
 }
