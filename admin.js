@@ -140,27 +140,59 @@ async function logAdminAction({ adminId = null, action, target_type = null, targ
 }
 
 // 신고 처리 상태 변경 + 처리 내역(report_actions) 기록.
-// report.status는 처리 라이프사이클만 담당 (dismissed는 더 이상 status 값이 아님 — sql/alter_report_status_enum_v2.sql 참고).
+// report.status는 처리 라이프사이클만 담당 (sql/alter_report_status_enum_v2.sql 참고).
+// report.resolution_type은 "처리 결과가 무엇이었나"를 담당 (sql/alter_report_add_resolution_type_column.sql 참고).
 // "어떻게 처리됐는지"는 report_actions.action_type에 그대로 기록되므로 정보 손실 없음.
+// admin_id는 req.admin(JWT 인증, utils/adminAuth.js의 requireAdmin)에서 가져온다.
 const REPORT_ACTION_TO_STATUS = {
+    notice: "resolved",
     warning: "resolved",
+    write_restricted: "resolved",
     content_deleted: "resolved",
     account_suspended: "resolved",
     account_banned: "resolved",
     dismissed: "resolved",
     no_action: "reviewing",
 };
+// action_type → resolution_type 매핑.
+// null이면 resolution_type을 업데이트하지 않음 (no_action은 resolved가 아니므로 NULL 유지).
+// dismissed는 request body의 resolution_type 값으로 결정 (아래 로직 참고).
+const REPORT_ACTION_TO_RESOLUTION_TYPE = {
+    notice: "notice_only",
+    warning: "action_taken",
+    write_restricted: "action_taken",
+    content_deleted: "action_taken",
+    account_suspended: "action_taken",
+    account_banned: "action_taken",
+    dismissed: null, // request body에서 결정
+    no_action: null,
+};
+// [무혐의] 선택 시 드롭다운으로 고를 수 있는 세부 사유 (기획자 확인 2026-07-01).
+const DISMISSED_RESOLUTION_TYPES = new Set(["dismissed", "duplicate", "insufficient_evidence"]);
 async function update_report_status(req, res) {
     try {
         const report_id = parseInt(req.body.report_id);
-        const { action_type, memo } = req.body;
+        const { action_type, memo, resolution_type: bodyResolutionType } = req.body;
         if (isNaN(report_id) || !Object.prototype.hasOwnProperty.call(REPORT_ACTION_TO_STATUS, action_type)) {
             return res.end("<h1>잘못된 요청입니다.</h1>");
         }
         const status = REPORT_ACTION_TO_STATUS[action_type];
+        // resolution_type 결정: dismissed는 드롭다운 선택값 사용, 나머지는 맵에서 파생.
+        let resolution_type;
+        if (action_type === "dismissed") {
+            resolution_type = DISMISSED_RESOLUTION_TYPES.has(bodyResolutionType)
+                ? bodyResolutionType
+                : "dismissed"; // 드롭다운 미전송 시 기본값
+        } else {
+            resolution_type = REPORT_ACTION_TO_RESOLUTION_TYPE[action_type]; // null이면 업데이트 안 함
+        }
+        const reportUpdate = { status };
+        if (resolution_type !== null && resolution_type !== undefined) {
+            reportUpdate.resolution_type = resolution_type;
+        }
         const trx = await knex.transaction();
         try {
-            await trx("report").where("report_id", report_id).update({ status });
+            await trx("report").where("report_id", report_id).update(reportUpdate);
             await trx("report_actions").insert({
                 report_id,
                 admin_id: req.admin.id,
@@ -177,7 +209,7 @@ async function update_report_status(req, res) {
             action: "report_status_change",
             target_type: "report",
             target_id: report_id,
-            detail: `action_type=${action_type}, status=${status}`,
+            detail: `action_type=${action_type}, status=${status}, resolution_type=${resolution_type ?? "null"}`,
         });
         res.redirect("/admin/setblock");
     } catch (error) {
