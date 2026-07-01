@@ -4,6 +4,7 @@
 const express = require("express");
 const router = express.Router();
 const cors = require("cors");
+const { rateLimit } = require("express-rate-limit");
 const knex = require("./knex.js");
 const bcrypt = require("bcrypt");
 const {
@@ -16,10 +17,20 @@ const {
 // 개발 중에는 Vite 기본 포트, 배포 시에는 .env의 ADMIN_WEB_ORIGIN으로 교체.
 const ADMIN_WEB_ORIGIN = process.env.ADMIN_WEB_ORIGIN || "http://localhost:5173";
 
+// 로그인 브루트포스 방어. admin.js의 로그인 라우트와 동일한 정책(IP당 15분 10회) — 별도 엔드포인트라
+// 카운터는 따로 관리되지만, 어느 한쪽만 뚫는 것도 똑같이 막혀야 하므로 정책 자체는 통일해둔다.
+const loginRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: 0, msg: "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요." },
+});
+
 router.use(cors({ origin: ADMIN_WEB_ORIGIN }));
 router.use(express.json());
 
-router.post("/login", async (req, res) => {
+router.post("/login", loginRateLimiter, async (req, res) => {
     try {
         const email = (req.body.email || "").trim();
         const password = req.body.password || "";

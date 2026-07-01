@@ -3,6 +3,7 @@ const router = express.Router();
 const knex = require("./knex.js");
 const dotenv = require("dotenv");
 const bcrypt = require("bcrypt");
+const { rateLimit } = require("express-rate-limit");
 dotenv.config();
 
 // 인증 로직은 admin_api.js(신규 React용 JSON API)와 공유하므로 utils/adminAuth.js로 분리되어 있다.
@@ -13,6 +14,16 @@ const {
     revokeAdminToken,
     getTokenFromCookie: getAdminTokenFromCookie,
 } = require("./utils/adminAuth.js");
+
+// 로그인 브루트포스 방어. IP당 15분에 10회로 제한 — 비밀번호 대량 시도를 막는 게 목적이라
+// 정상적인 재시도(오타 등)는 넉넉하게 허용하는 수준으로 잡음.
+const loginRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.",
+});
 
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -1210,7 +1221,7 @@ function login(res) {
 }
 async function logout(req, res) {
     await revokeAdminToken(getAdminTokenFromCookie(req));
-    res.setHeader("Set-Cookie", `${ADMIN_COOKIE_NAME}=deleted; Max-Age=0; Path=/`);
+    res.setHeader("Set-Cookie", `${ADMIN_COOKIE_NAME}=deleted; Max-Age=0; Path=/; SameSite=Strict${req.secure ? "; Secure" : ""}`);
     res.redirect("/admin");
 }
 router.get("/", (req, res) => {
@@ -1220,7 +1231,7 @@ router.get("/", (req, res) => {
 router.get("/login", (req, res) => {
     login(res);
 });
-router.post("/login", async (req, res) => {
+router.post("/login", loginRateLimiter, async (req, res) => {
     try {
         const email = (req.body.email || "").trim();
         const password = req.body.password || "";
@@ -1233,7 +1244,13 @@ router.post("/login", async (req, res) => {
         if (!ok) return res.redirect("/admin");
 
         const token = await issueAdminSession(admin);
-        res.setHeader("Set-Cookie", `${ADMIN_COOKIE_NAME}=${token}; HttpOnly; Path=/`);
+        // SameSite=Strict: 이 쿠키는 admin.js 자체 내 이동에서만 쓰이므로 크로스사이트로 보낼 일이 없음.
+        // Secure는 실제 TLS 연결(req.secure)일 때만 붙인다 — 로컬 개발용 평문 HTTP 서버(scripts/dev_admin_server.js)에서는
+        // Secure 쿠키를 브라우저가 저장/전송하지 않아 로그인이 막히기 때문.
+        res.setHeader(
+            "Set-Cookie",
+            `${ADMIN_COOKIE_NAME}=${token}; HttpOnly; SameSite=Strict; Path=/${req.secure ? "; Secure" : ""}`
+        );
         res.redirect("/admin/member");
     } catch (error) {
         console.error("Error in admin login:", error);
