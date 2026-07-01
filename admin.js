@@ -626,6 +626,11 @@ async function member(res) {
                     <td>서비스알림</td>
                     <td>활동알림</td>
                     <td>마케팅알림</td>
+                    <td>계정상태</td>
+                    <td>정지해제일</td>
+                    <td>글제한해제일</td>
+                    <td>서포터</td>
+                    <td>상태변경</td>
                 </tr>
         `;
 
@@ -633,18 +638,41 @@ async function member(res) {
         for (const test of all_member_info) {
             const tmp = new Date(test.birthdate)
             birthdate = tmp.getUTCFullYear() + "년" + (tmp.getUTCMonth() + 1) + "월" + tmp.getUTCDate() + "일";
-            // birthdate = tmp.getFullYear();
+            // datetime-local input value 형식 (YYYY-MM-DDThh:mm)
+            const toDatetimeLocal = (val) => {
+                if (!val) return "";
+                const d = new Date(val);
+                return d.toISOString().slice(0, 16);
+            };
+            const USER_STATUSES = ["normal", "warned", "suspended", "banned"];
+            const statusOptions = USER_STATUSES.map(s =>
+                `<option value="${s}"${test.status === s ? " selected" : ""}>${s}</option>`
+            ).join("");
             data += `
                 <tr>
-                    <td>${test.id}</td>
-                    <td>${test.user_id}</td>
-                    <td>${test.email}</td>
+                    <td>${escapeHtml(test.id)}</td>
+                    <td>${escapeHtml(test.user_id)}</td>
+                    <td>${escapeHtml(test.email)}</td>
                     <td>${birthdate}</td>
                     <td>${test.kakao_id ? '카카오' : '애플'}</td>
                     <td>${test.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
-                    <td>${test.servicealram}</td>
-                    <td>${test.useralram}</td>
-                    <td>${test.marketalram}</td>
+                    <td>${escapeHtml(test.servicealram)}</td>
+                    <td>${escapeHtml(test.useralram)}</td>
+                    <td>${escapeHtml(test.marketalram)}</td>
+                    <td>${escapeHtml(test.status ?? "normal")}</td>
+                    <td>${test.suspended_until ? test.suspended_until.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "-"}</td>
+                    <td>${test.write_restricted_until ? test.write_restricted_until.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "-"}</td>
+                    <td>${test.is_supporter ? "Y" : "N"}</td>
+                    <td>
+                        <form method="post" action="/admin/member/status" style="display:flex;flex-direction:column;gap:3px;min-width:220px;">
+                            <input type="hidden" name="user_id" value="${escapeHtml(test.id)}"/>
+                            <select name="status">${statusOptions}</select>
+                            <label style="font-size:11px;">정지해제일<input type="datetime-local" name="suspended_until" value="${toDatetimeLocal(test.suspended_until)}"/></label>
+                            <label style="font-size:11px;">글제한해제일<input type="datetime-local" name="write_restricted_until" value="${toDatetimeLocal(test.write_restricted_until)}"/></label>
+                            <label style="font-size:11px;"><input type="checkbox" name="is_supporter" value="1"${test.is_supporter ? " checked" : ""/> 서포터</label>
+                            <input type="submit" value="변경"/>
+                        </form>
+                    </td>
                 </tr>
             `;
         }
@@ -658,6 +686,64 @@ async function member(res) {
         // 에러 처리
         console.error("Error in member function:", error);
         res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
+async function update_user_status(req, res) {
+    const ALLOWED_STATUSES = ["normal", "warned", "suspended", "banned"];
+
+    try {
+        const { user_id, status, suspended_until, write_restricted_until, is_supporter } = req.body;
+
+        // user_id: 정수형 검증
+        const userId = parseInt(user_id, 10);
+        if (!Number.isInteger(userId) || userId <= 0) {
+            return res.status(400).end("잘못된 user_id입니다.");
+        }
+
+        // status: 화이트리스트 검증
+        if (!ALLOWED_STATUSES.includes(status)) {
+            return res.status(400).end("허용되지 않은 status 값입니다.");
+        }
+
+        // datetime 필드: 비어 있으면 NULL, 있으면 ISO 형식인지 간단 검증
+        const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
+        let suspendedUntilVal = null;
+        if (suspended_until && suspended_until.trim() !== "") {
+            if (!DATETIME_RE.test(suspended_until.trim())) {
+                return res.status(400).end("suspended_until 형식이 올바르지 않습니다.");
+            }
+            suspendedUntilVal = suspended_until.trim();
+        }
+        let writeRestrictedUntilVal = null;
+        if (write_restricted_until && write_restricted_until.trim() !== "") {
+            if (!DATETIME_RE.test(write_restricted_until.trim())) {
+                return res.status(400).end("write_restricted_until 형식이 올바르지 않습니다.");
+            }
+            writeRestrictedUntilVal = write_restricted_until.trim();
+        }
+
+        // is_supporter: checkbox는 "1" or undefined
+        const isSupporterVal = is_supporter === "1" ? 1 : 0;
+
+        await knex("user").where({ id: userId }).update({
+            status: status,
+            suspended_until: suspendedUntilVal,
+            write_restricted_until: writeRestrictedUntilVal,
+            is_supporter: isSupporterVal,
+        });
+
+        logAdminAction({
+            action: "UPDATE_USER_STATUS",
+            target_type: "user",
+            target_id: userId,
+            detail: JSON.stringify({ status, suspended_until: suspendedUntilVal, write_restricted_until: writeRestrictedUntilVal, is_supporter: isSupporterVal }),
+        });
+
+        return res.redirect("/admin/member");
+    } catch (error) {
+        console.error("Error in update_user_status:", error);
+        return res.status(500).end("서버에서 오류가 발생했습니다.");
     }
 }
 
@@ -1139,6 +1225,10 @@ router.get("/logout", (req, res) => {
 });
 router.get("/member", (req, res) => {
     check_login(member(res), req, res);
+});
+router.post("/member/status", (req, res) => {
+    if (!req.headers.cookie) return res.redirect("/admin");
+    update_user_status(req, res);
 });
 router.get("/post", (req, res) => {
     check_login(post(res), req, res);
