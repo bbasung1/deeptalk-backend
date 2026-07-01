@@ -62,7 +62,8 @@ router.delete("/:id", async (req, res) => {
     }
     try {
         // 하드 삭제(.delete()) 대신 deleted_at을 채우는 소프트 삭제로 전환 (talk과 동일한 패턴).
-        await trx("think").where("think_num", req.params.id).update({ deleted_at: knex.fn.now() });
+        // visibility_status도 동시 업데이트 (alter_add_visibility_status_columns.sql 참고).
+        await trx("think").where("think_num", req.params.id).update({ deleted_at: knex.fn.now(), visibility_status: "deleted_by_user" });
         console.log(post_info);
         let quote_num;
         if (post_info.quote && post_info.draft == 0) {
