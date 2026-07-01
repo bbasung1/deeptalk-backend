@@ -5,9 +5,8 @@ const dotenv = require("dotenv");
 dotenv.config();
 const session = [];
 
-// session[] 배열과 실제로 대조하는 세션 검증 함수.
-// check_login()은 cookie 존재 여부만 확인하고 session[]을 검증하지 않는 기존 버그가 있음.
-// 신규 라우트에서는 이 함수를 사용해 로그아웃 후 세션 무효화가 실제로 동작하도록 함.
+// connect.id 쿠키 값을 session[] 배열과 실제로 대조하는 세션 검증 함수.
+// 모든 어드민 라우트는 이 함수로 세션을 검증한다.
 function isValidSession(req) {
     if (!req.headers.cookie) return false;
     const match = req.headers.cookie
@@ -258,7 +257,7 @@ async function report_actions_page(req, res) {
 
 // report_evidence_snapshots 조회 화면.
 // content_snapshot_raw는 신고 시점 콘텐츠 원문(개인정보 포함 가능)이라 이 페이지 전체를
-// check_login으로 막아둔 것 외에는 별도 마스킹 없이 그대로 보여줌 — 관리자만 봐야 하는 데이터이므로
+// isValidSession으로 막아둔 것 외에는 별도 마스킹 없이 그대로 보여줌 — 관리자만 봐야 하는 데이터이므로
 // sql/add_report_evidence_snapshots_table.sql의 "관리자 권한으로만 접근" 요구사항을 라우트 레벨에서 만족시킴.
 // JSON 컬럼(content_snapshot_raw/masked/context_json)은 문자열 또는 이미 파싱된 객체로 들어올 수 있어 안전하게 처리.
 function stringifySnapshotValue(value) {
@@ -1201,13 +1200,6 @@ function login(res) {
   `;
     admin_html("로그인", data, res);
 }
-function check_login(genfunc, req, res) {
-    if (req.headers.cookie) {
-        genfunc;
-    } else {
-        res.redirect("/admin");
-    }
-}
 function logout(req, res) {
     const [, privatekey] = req.headers.cookie.split("=");
     temp = session.findIndex((v) => v == privatekey);
@@ -1230,42 +1222,49 @@ router.post("/login", (req, res) => {
     }
 });
 router.get("/setblock", (req, res) => {
-    check_login(admin_block(res), req, res);
+    if (!isValidSession(req)) return res.redirect("/admin");
+    admin_block(res);
 });
 router.post("/setblock/status", (req, res) => {
-    check_login(update_report_status(req, res), req, res);
+    if (!isValidSession(req)) return res.redirect("/admin");
+    update_report_status(req, res);
 });
 router.get("/logout", (req, res) => {
-    check_login(logout(req, res), req, res);
+    if (!isValidSession(req)) return res.redirect("/admin");
+    logout(req, res);
 });
 router.get("/member", (req, res) => {
-    check_login(member(res), req, res);
+    if (!isValidSession(req)) return res.redirect("/admin");
+    member(res);
 });
 router.post("/member/status", (req, res) => {
     if (!isValidSession(req)) return res.redirect("/admin");
     update_user_status(req, res);
 });
 router.get("/post", (req, res) => {
-    check_login(post(res), req, res);
+    if (!isValidSession(req)) return res.redirect("/admin");
+    post(res);
 });
 router.get("/first_activity", (req, res) => {
-    check_login(first_activity(res), req, res);
+    if (!isValidSession(req)) return res.redirect("/admin");
+    first_activity(res);
 });
 router.get("/session_count", (req, res) => {
-    check_login(session_count(res), req, res);
+    if (!isValidSession(req)) return res.redirect("/admin");
+    session_count(res);
 });
 router.get("/admin_message", (req, res) => {
-    check_login(admin_message_page(res), req, res);
+    if (!isValidSession(req)) return res.redirect("/admin");
+    admin_message_page(res);
 });
 router.post("/admin_message", (req, res) => {
-    check_login(send_admin_message(req, res), req, res);
+    if (!isValidSession(req)) return res.redirect("/admin");
+    send_admin_message(req, res);
 });
 router.get("/app_launch_count", (req, res) => {
-    check_login(app_launch_count(res), req, res);
+    if (!isValidSession(req)) return res.redirect("/admin");
+    app_launch_count(res);
 });
-// 다른 라우트와 달리 인자를 먼저 평가해 호출하는 check_login(fn(), ...) 패턴을 쓰지 않음.
-// 그 패턴은 fn()이 cookie 체크 전에 이미 실행돼버리는 기존 버그가 있어(추후 admin.js 개편 시 정리 예정),
-// 신규 라우트에서는 반복하지 않고 cookie 체크를 먼저 한 뒤에만 핸들러를 호출함.
 router.get("/report_actions", (req, res) => {
     if (!isValidSession(req)) return res.redirect("/admin");
     report_actions_page(req, res);
@@ -1287,7 +1286,8 @@ router.get("/report_ai_reviews", (req, res) => {
     report_ai_reviews_page(req, res);
 });
 router.get("/session_stats", (req, res) => {
-    check_login(session_stats(res), req, res);
+    if (!isValidSession(req)) return res.redirect("/admin");
+    session_stats(res);
 });
 
 // ─── 신규 조회 화면 함수들 ────────────────────────────────────────────────
