@@ -4,6 +4,21 @@ const knex = require("./knex.js");
 const dotenv = require("dotenv");
 dotenv.config();
 const session = [];
+
+// session[] 배열과 실제로 대조하는 세션 검증 함수.
+// check_login()은 cookie 존재 여부만 확인하고 session[]을 검증하지 않는 기존 버그가 있음.
+// 신규 라우트에서는 이 함수를 사용해 로그아웃 후 세션 무효화가 실제로 동작하도록 함.
+function isValidSession(req) {
+    if (!req.headers.cookie) return false;
+    const match = req.headers.cookie
+        .split(";")
+        .map(c => c.trim())
+        .find(c => c.startsWith("connect.id="));
+    if (!match) return false;
+    const sessionId = Number(match.slice("connect.id=".length));
+    return session.includes(sessionId);
+}
+
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -1227,7 +1242,7 @@ router.get("/member", (req, res) => {
     check_login(member(res), req, res);
 });
 router.post("/member/status", (req, res) => {
-    if (!req.headers.cookie) return res.redirect("/admin");
+    if (!isValidSession(req)) return res.redirect("/admin");
     update_user_status(req, res);
 });
 router.get("/post", (req, res) => {
@@ -1252,35 +1267,23 @@ router.get("/app_launch_count", (req, res) => {
 // 그 패턴은 fn()이 cookie 체크 전에 이미 실행돼버리는 기존 버그가 있어(추후 admin.js 개편 시 정리 예정),
 // 신규 라우트에서는 반복하지 않고 cookie 체크를 먼저 한 뒤에만 핸들러를 호출함.
 router.get("/report_actions", (req, res) => {
-    if (!req.headers.cookie) {
-        return res.redirect("/admin");
-    }
+    if (!isValidSession(req)) return res.redirect("/admin");
     report_actions_page(req, res);
 });
-// content_snapshot_raw(신고 시점 원문)를 보여주는 민감한 화면이라 cookie 체크를 핸들러 호출보다
-// 먼저 평가하는 패턴을 report_actions와 동일하게 사용 — check_login(fn(), ...) 패턴은 쓰지 않음.
 router.get("/report_evidence_snapshots", (req, res) => {
-    if (!req.headers.cookie) {
-        return res.redirect("/admin");
-    }
+    if (!isValidSession(req)) return res.redirect("/admin");
     report_evidence_snapshots_page(req, res);
 });
 router.get("/audit_logs", (req, res) => {
-    if (!req.headers.cookie) {
-        return res.redirect("/admin");
-    }
+    if (!isValidSession(req)) return res.redirect("/admin");
     admin_audit_logs_page(req, res);
 });
 router.get("/moderation_cases", (req, res) => {
-    if (!req.headers.cookie) {
-        return res.redirect("/admin");
-    }
+    if (!isValidSession(req)) return res.redirect("/admin");
     moderation_cases_page(req, res);
 });
 router.get("/report_ai_reviews", (req, res) => {
-    if (!req.headers.cookie) {
-        return res.redirect("/admin");
-    }
+    if (!isValidSession(req)) return res.redirect("/admin");
     report_ai_reviews_page(req, res);
 });
 router.get("/session_stats", (req, res) => {
@@ -1484,23 +1487,23 @@ async function admin_fcm_tokens_page(req, res) {
 
 // ─── 신규 조회 화면 라우트 (쿠키 선체크 패턴 적용) ───────────────────────
 router.get("/comments", (req, res) => {
-    if (!req.headers.cookie) return res.redirect("/admin");
+    if (!isValidSession(req)) return res.redirect("/admin");
     admin_comments_page(req, res);
 });
 router.get("/quotes", (req, res) => {
-    if (!req.headers.cookie) return res.redirect("/admin");
+    if (!isValidSession(req)) return res.redirect("/admin");
     admin_quotes_page(req, res);
 });
 router.get("/reactions", (req, res) => {
-    if (!req.headers.cookie) return res.redirect("/admin");
+    if (!isValidSession(req)) return res.redirect("/admin");
     admin_reactions_page(req, res);
 });
 router.get("/blocks", (req, res) => {
-    if (!req.headers.cookie) return res.redirect("/admin");
+    if (!isValidSession(req)) return res.redirect("/admin");
     admin_blocks_page(req, res);
 });
 router.get("/fcm_tokens", (req, res) => {
-    if (!req.headers.cookie) return res.redirect("/admin");
+    if (!isValidSession(req)) return res.redirect("/admin");
     admin_fcm_tokens_page(req, res);
 });
 
