@@ -669,7 +669,7 @@ async function member(res) {
                             <select name="status">${statusOptions}</select>
                             <label style="font-size:11px;">정지해제일<input type="datetime-local" name="suspended_until" value="${toDatetimeLocal(test.suspended_until)}"/></label>
                             <label style="font-size:11px;">글제한해제일<input type="datetime-local" name="write_restricted_until" value="${toDatetimeLocal(test.write_restricted_until)}"/></label>
-                            <label style="font-size:11px;"><input type="checkbox" name="is_supporter" value="1"${test.is_supporter ? " checked" : ""/> 서포터</label>
+                            <label style="font-size:11px;"><input type="checkbox" name="is_supporter" value="1"${test.is_supporter ? " checked" : ""}/> 서포터</label>
                             <input type="submit" value="변경"/>
                         </form>
                     </td>
