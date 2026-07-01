@@ -4,6 +4,21 @@ const knex = require("./knex.js");
 const dotenv = require("dotenv");
 dotenv.config();
 const session = [];
+
+// session[] 배열과 실제로 대조하는 세션 검증 함수.
+// check_login()은 cookie 존재 여부만 확인하고 session[]을 검증하지 않는 기존 버그가 있음.
+// 신규 라우트에서는 이 함수를 사용해 로그아웃 후 세션 무효화가 실제로 동작하도록 함.
+function isValidSession(req) {
+    if (!req.headers.cookie) return false;
+    const match = req.headers.cookie
+        .split(";")
+        .map(c => c.trim())
+        .find(c => c.startsWith("connect.id="));
+    if (!match) return false;
+    const sessionId = Number(match.slice("connect.id=".length));
+    return session.includes(sessionId);
+}
+
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
@@ -626,6 +641,11 @@ async function member(res) {
                     <td>서비스알림</td>
                     <td>활동알림</td>
                     <td>마케팅알림</td>
+                    <td>계정상태</td>
+                    <td>정지해제일</td>
+                    <td>글제한해제일</td>
+                    <td>서포터</td>
+                    <td>상태변경</td>
                 </tr>
         `;
 
@@ -633,18 +653,41 @@ async function member(res) {
         for (const test of all_member_info) {
             const tmp = new Date(test.birthdate)
             birthdate = tmp.getUTCFullYear() + "년" + (tmp.getUTCMonth() + 1) + "월" + tmp.getUTCDate() + "일";
-            // birthdate = tmp.getFullYear();
+            // datetime-local input value 형식 (YYYY-MM-DDThh:mm)
+            const toDatetimeLocal = (val) => {
+                if (!val) return "";
+                const d = new Date(val);
+                return d.toISOString().slice(0, 16);
+            };
+            const USER_STATUSES = ["normal", "warned", "suspended", "banned"];
+            const statusOptions = USER_STATUSES.map(s =>
+                `<option value="${s}"${test.status === s ? " selected" : ""}>${s}</option>`
+            ).join("");
             data += `
                 <tr>
-                    <td>${test.id}</td>
-                    <td>${test.user_id}</td>
-                    <td>${test.email}</td>
+                    <td>${escapeHtml(test.id)}</td>
+                    <td>${escapeHtml(test.user_id)}</td>
+                    <td>${escapeHtml(test.email)}</td>
                     <td>${birthdate}</td>
                     <td>${test.kakao_id ? '카카오' : '애플'}</td>
                     <td>${test.created_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
-                    <td>${test.servicealram}</td>
-                    <td>${test.useralram}</td>
-                    <td>${test.marketalram}</td>
+                    <td>${escapeHtml(test.servicealram)}</td>
+                    <td>${escapeHtml(test.useralram)}</td>
+                    <td>${escapeHtml(test.marketalram)}</td>
+                    <td>${escapeHtml(test.status ?? "normal")}</td>
+                    <td>${test.suspended_until ? test.suspended_until.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "-"}</td>
+                    <td>${test.write_restricted_until ? test.write_restricted_until.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "-"}</td>
+                    <td>${test.is_supporter ? "Y" : "N"}</td>
+                    <td>
+                        <form method="post" action="/admin/member/status" style="display:flex;flex-direction:column;gap:3px;min-width:220px;">
+                            <input type="hidden" name="user_id" value="${escapeHtml(test.id)}"/>
+                            <select name="status">${statusOptions}</select>
+                            <label style="font-size:11px;">정지해제일<input type="datetime-local" name="suspended_until" value="${toDatetimeLocal(test.suspended_until)}"/></label>
+                            <label style="font-size:11px;">글제한해제일<input type="datetime-local" name="write_restricted_until" value="${toDatetimeLocal(test.write_restricted_until)}"/></label>
+                            <label style="font-size:11px;"><input type="checkbox" name="is_supporter" value="1"${test.is_supporter ? " checked" : ""}/> 서포터</label>
+                            <input type="submit" value="변경"/>
+                        </form>
+                    </td>
                 </tr>
             `;
         }
@@ -658,6 +701,64 @@ async function member(res) {
         // 에러 처리
         console.error("Error in member function:", error);
         res.end("<h1>서버에서 오류가 발생했습니다.</h1>");
+    }
+}
+
+async function update_user_status(req, res) {
+    const ALLOWED_STATUSES = ["normal", "warned", "suspended", "banned"];
+
+    try {
+        const { user_id, status, suspended_until, write_restricted_until, is_supporter } = req.body;
+
+        // user_id: 정수형 검증
+        const userId = parseInt(user_id, 10);
+        if (!Number.isInteger(userId) || userId <= 0) {
+            return res.status(400).end("잘못된 user_id입니다.");
+        }
+
+        // status: 화이트리스트 검증
+        if (!ALLOWED_STATUSES.includes(status)) {
+            return res.status(400).end("허용되지 않은 status 값입니다.");
+        }
+
+        // datetime 필드: 비어 있으면 NULL, 있으면 ISO 형식인지 간단 검증
+        const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
+        let suspendedUntilVal = null;
+        if (suspended_until && suspended_until.trim() !== "") {
+            if (!DATETIME_RE.test(suspended_until.trim())) {
+                return res.status(400).end("suspended_until 형식이 올바르지 않습니다.");
+            }
+            suspendedUntilVal = suspended_until.trim();
+        }
+        let writeRestrictedUntilVal = null;
+        if (write_restricted_until && write_restricted_until.trim() !== "") {
+            if (!DATETIME_RE.test(write_restricted_until.trim())) {
+                return res.status(400).end("write_restricted_until 형식이 올바르지 않습니다.");
+            }
+            writeRestrictedUntilVal = write_restricted_until.trim();
+        }
+
+        // is_supporter: checkbox는 "1" or undefined
+        const isSupporterVal = is_supporter === "1" ? 1 : 0;
+
+        await knex("user").where({ id: userId }).update({
+            status: status,
+            suspended_until: suspendedUntilVal,
+            write_restricted_until: writeRestrictedUntilVal,
+            is_supporter: isSupporterVal,
+        });
+
+        logAdminAction({
+            action: "UPDATE_USER_STATUS",
+            target_type: "user",
+            target_id: userId,
+            detail: JSON.stringify({ status, suspended_until: suspendedUntilVal, write_restricted_until: writeRestrictedUntilVal, is_supporter: isSupporterVal }),
+        });
+
+        return res.redirect("/admin/member");
+    } catch (error) {
+        console.error("Error in update_user_status:", error);
+        return res.status(500).end("서버에서 오류가 발생했습니다.");
     }
 }
 
@@ -1140,6 +1241,10 @@ router.get("/logout", (req, res) => {
 router.get("/member", (req, res) => {
     check_login(member(res), req, res);
 });
+router.post("/member/status", (req, res) => {
+    if (!isValidSession(req)) return res.redirect("/admin");
+    update_user_status(req, res);
+});
 router.get("/post", (req, res) => {
     check_login(post(res), req, res);
 });
@@ -1162,38 +1267,244 @@ router.get("/app_launch_count", (req, res) => {
 // 그 패턴은 fn()이 cookie 체크 전에 이미 실행돼버리는 기존 버그가 있어(추후 admin.js 개편 시 정리 예정),
 // 신규 라우트에서는 반복하지 않고 cookie 체크를 먼저 한 뒤에만 핸들러를 호출함.
 router.get("/report_actions", (req, res) => {
-    if (!req.headers.cookie) {
-        return res.redirect("/admin");
-    }
+    if (!isValidSession(req)) return res.redirect("/admin");
     report_actions_page(req, res);
 });
-// content_snapshot_raw(신고 시점 원문)를 보여주는 민감한 화면이라 cookie 체크를 핸들러 호출보다
-// 먼저 평가하는 패턴을 report_actions와 동일하게 사용 — check_login(fn(), ...) 패턴은 쓰지 않음.
 router.get("/report_evidence_snapshots", (req, res) => {
-    if (!req.headers.cookie) {
-        return res.redirect("/admin");
-    }
+    if (!isValidSession(req)) return res.redirect("/admin");
     report_evidence_snapshots_page(req, res);
 });
 router.get("/audit_logs", (req, res) => {
-    if (!req.headers.cookie) {
-        return res.redirect("/admin");
-    }
+    if (!isValidSession(req)) return res.redirect("/admin");
     admin_audit_logs_page(req, res);
 });
 router.get("/moderation_cases", (req, res) => {
-    if (!req.headers.cookie) {
-        return res.redirect("/admin");
-    }
+    if (!isValidSession(req)) return res.redirect("/admin");
     moderation_cases_page(req, res);
 });
 router.get("/report_ai_reviews", (req, res) => {
-    if (!req.headers.cookie) {
-        return res.redirect("/admin");
-    }
+    if (!isValidSession(req)) return res.redirect("/admin");
     report_ai_reviews_page(req, res);
 });
 router.get("/session_stats", (req, res) => {
     check_login(session_stats(res), req, res);
 });
+
+// ─── 신규 조회 화면 함수들 ────────────────────────────────────────────────
+// 공통 nav 바 — 새 화면에만 사용 (기존 화면 nav는 각자 하드코딩되어 있음)
+const CONTENT_SCREEN_NAV = `<a href="/admin/logout">logout</a> ` +
+    `<a href="/admin/member">회원관리</a> ` +
+    `<a href="/admin/post">글 현황</a> ` +
+    `<a href="/admin/setblock">신고 목록</a> ` +
+    `<a href="/admin/report_actions">신고 처리 내역</a> ` +
+    `<a href="/admin/audit_logs">감사 로그</a> ` +
+    `<a href="/admin/moderation_cases">모더레이션 케이스</a> ` +
+    `<a href="/admin/report_ai_reviews">AI 분석</a> ` +
+    `<a href="/admin/comments">댓글 현황</a> ` +
+    `<a href="/admin/quotes">인용 현황</a> ` +
+    `<a href="/admin/reactions">좋아요 현황</a> ` +
+    `<a href="/admin/blocks">차단/뮤트 현황</a> ` +
+    `<a href="/admin/fcm_tokens">FCM 토큰</a><br>`;
+
+async function admin_comments_page(req, res) {
+    try {
+        const COMMENT_TYPE = { 0: "Jam-Talk 댓글", 1: "Jin-Talk 댓글", 2: "대댓글" };
+        const rows = await knex("comment")
+            .select("comment_num", "type", "post_num", "subject", "writer_id", "timestamp", "deleted_at")
+            .orderBy("timestamp", "desc")
+            .limit(200);
+
+        let body = CONTENT_SCREEN_NAV;
+        body += `<h1>댓글 현황 (최근 200건)</h1><table border="1">`;
+        body += `<tr><td>comment_num</td><td>유형</td><td>post_num</td><td>내용</td><td>작성자 id</td><td>작성일시</td><td>삭제여부</td></tr>`;
+        for (const r of rows) {
+            body += `<tr>
+                <td>${escapeHtml(r.comment_num)}</td>
+                <td>${escapeHtml(COMMENT_TYPE[r.type] ?? r.type)}</td>
+                <td>${escapeHtml(r.post_num)}</td>
+                <td>${escapeHtml(r.subject)}</td>
+                <td>${escapeHtml(r.writer_id)}</td>
+                <td>${r.timestamp ? r.timestamp.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "-"}</td>
+                <td>${r.deleted_at ? "삭제됨 (" + r.deleted_at.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) + ")" : "정상"}</td>
+            </tr>`;
+        }
+        body += `</table>`;
+        admin_html("댓글 현황", body, res);
+    } catch (err) {
+        console.error("admin_comments_page error:", err);
+        res.status(500).end("<h1>서버 오류</h1>");
+    }
+}
+
+async function admin_quotes_page(req, res) {
+    try {
+        const QUOTE_TYPE = { 0: "Jam-Talk", 1: "Jin-Talk", 2: "댓글" };
+        const rows = await knex
+            .select([
+                "timestamp",
+                knex.raw("talk_num AS post_num"),
+                knex.raw("'Jam-Talk' AS post_type"),
+                "writer_id",
+                "quote",
+                "quote_type",
+                "deleted_at",
+            ])
+            .from("talk")
+            .whereNotNull("quote")
+            .unionAll([
+                knex
+                    .select([
+                        "timestamp",
+                        knex.raw("think_num AS post_num"),
+                        knex.raw("'Jin-Talk' AS post_type"),
+                        "writer_id",
+                        "quote",
+                        "quote_type",
+                        "deleted_at",
+                    ])
+                    .from("think")
+                    .whereNotNull("quote"),
+            ])
+            .orderBy("timestamp", "desc")
+            .limit(200);
+
+        let body = CONTENT_SCREEN_NAV;
+        body += `<h1>인용 현황 (최근 200건)</h1><table border="1">`;
+        body += `<tr><td>인용글 유형</td><td>인용글 번호</td><td>작성자 id</td><td>원본 유형</td><td>원본 post_num</td><td>작성일시</td><td>삭제여부</td></tr>`;
+        for (const r of rows) {
+            body += `<tr>
+                <td>${escapeHtml(r.post_type)}</td>
+                <td>${escapeHtml(r.post_num)}</td>
+                <td>${escapeHtml(r.writer_id)}</td>
+                <td>${escapeHtml(QUOTE_TYPE[r.quote_type] ?? r.quote_type)}</td>
+                <td>${escapeHtml(r.quote)}</td>
+                <td>${r.timestamp ? r.timestamp.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "-"}</td>
+                <td>${r.deleted_at ? "삭제됨" : "정상"}</td>
+            </tr>`;
+        }
+        body += `</table>`;
+        admin_html("인용 현황", body, res);
+    } catch (err) {
+        console.error("admin_quotes_page error:", err);
+        res.status(500).end("<h1>서버 오류</h1>");
+    }
+}
+
+async function admin_reactions_page(req, res) {
+    try {
+        const LIKE_TYPE = { 0: "Jam-Talk", 1: "Jin-Talk", 2: "댓글" };
+        // 타입별 요약 통계
+        const stats = await knex("post_like")
+            .select(
+                "type",
+                knex.raw("COUNT(*) AS total"),
+                knex.raw("SUM(CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END) AS active")
+            )
+            .groupBy("type");
+        // 최근 200건
+        const rows = await knex("post_like")
+            .select("user_id", "type", "post_id", "deleted_at")
+            .orderBy("post_id", "desc")
+            .limit(200);
+
+        let body = CONTENT_SCREEN_NAV;
+        body += `<h1>좋아요 현황</h1>`;
+        body += `<h2>타입별 요약</h2><table border="1"><tr><td>유형</td><td>전체</td><td>활성</td></tr>`;
+        for (const s of stats) {
+            body += `<tr><td>${escapeHtml(LIKE_TYPE[s.type] ?? s.type)}</td><td>${escapeHtml(s.total)}</td><td>${escapeHtml(s.active ?? 0)}</td></tr>`;
+        }
+        body += `</table>`;
+        body += `<h2>최근 200건</h2><table border="1">`;
+        body += `<tr><td>user_id</td><td>유형</td><td>post_id</td><td>삭제여부</td></tr>`;
+        for (const r of rows) {
+            body += `<tr>
+                <td>${escapeHtml(r.user_id)}</td>
+                <td>${escapeHtml(LIKE_TYPE[r.type] ?? r.type)}</td>
+                <td>${escapeHtml(r.post_id)}</td>
+                <td>${r.deleted_at ? "삭제됨" : "정상"}</td>
+            </tr>`;
+        }
+        body += `</table>`;
+        admin_html("좋아요 현황", body, res);
+    } catch (err) {
+        console.error("admin_reactions_page error:", err);
+        res.status(500).end("<h1>서버 오류</h1>");
+    }
+}
+
+async function admin_blocks_page(req, res) {
+    try {
+        const BLOCK_TYPE = { 0: "차단", 1: "뮤트" };
+        const rows = await knex("block_list")
+            .select("user_id", "blocked_user_id", "type")
+            .orderBy("user_id", "asc")
+            .limit(500);
+
+        let body = CONTENT_SCREEN_NAV;
+        body += `<h1>차단/뮤트 현황 (최대 500건)</h1><table border="1">`;
+        body += `<tr><td>신청자 id</td><td>대상 id</td><td>유형</td></tr>`;
+        for (const r of rows) {
+            body += `<tr>
+                <td>${escapeHtml(r.user_id)}</td>
+                <td>${escapeHtml(r.blocked_user_id)}</td>
+                <td>${escapeHtml(BLOCK_TYPE[r.type] ?? r.type)}</td>
+            </tr>`;
+        }
+        body += `</table>`;
+        admin_html("차단/뮤트 현황", body, res);
+    } catch (err) {
+        console.error("admin_blocks_page error:", err);
+        res.status(500).end("<h1>서버 오류</h1>");
+    }
+}
+
+async function admin_fcm_tokens_page(req, res) {
+    try {
+        const rows = await knex("fcm_token")
+            .select("our_id", "type", "fcm_token")
+            .orderBy("our_id", "asc")
+            .limit(500);
+
+        let body = CONTENT_SCREEN_NAV;
+        body += `<h1>FCM 토큰 (CS 참고용, 최대 500건)</h1>`;
+        body += `<p style="color:red;">⚠ 이 화면의 FCM 토큰은 민감 정보입니다. 외부에 노출되지 않도록 주의하세요.</p>`;
+        body += `<table border="1"><tr><td>user id</td><td>기기유형</td><td>FCM 토큰</td></tr>`;
+        for (const r of rows) {
+            // 토큰 전체 표시 (어드민 내부 용도), XSS 방지 escapeHtml 적용
+            body += `<tr>
+                <td>${escapeHtml(r.our_id)}</td>
+                <td>${escapeHtml(r.type)}</td>
+                <td style="font-size:11px;word-break:break-all;">${escapeHtml(r.fcm_token)}</td>
+            </tr>`;
+        }
+        body += `</table>`;
+        admin_html("FCM 토큰", body, res);
+    } catch (err) {
+        console.error("admin_fcm_tokens_page error:", err);
+        res.status(500).end("<h1>서버 오류</h1>");
+    }
+}
+
+// ─── 신규 조회 화면 라우트 (쿠키 선체크 패턴 적용) ───────────────────────
+router.get("/comments", (req, res) => {
+    if (!isValidSession(req)) return res.redirect("/admin");
+    admin_comments_page(req, res);
+});
+router.get("/quotes", (req, res) => {
+    if (!isValidSession(req)) return res.redirect("/admin");
+    admin_quotes_page(req, res);
+});
+router.get("/reactions", (req, res) => {
+    if (!isValidSession(req)) return res.redirect("/admin");
+    admin_reactions_page(req, res);
+});
+router.get("/blocks", (req, res) => {
+    if (!isValidSession(req)) return res.redirect("/admin");
+    admin_blocks_page(req, res);
+});
+router.get("/fcm_tokens", (req, res) => {
+    if (!isValidSession(req)) return res.redirect("/admin");
+    admin_fcm_tokens_page(req, res);
+});
+
 module.exports = router;
