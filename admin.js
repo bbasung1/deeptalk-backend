@@ -148,6 +148,9 @@ async function update_report_status(req, res) {
             if (err.message === "REPORT_NOT_FOUND") {
                 return res.end("<h1>존재하지 않는 신고입니다.</h1>");
             }
+            if (err.message === "REPORT_LOCKED") {
+                return res.end("<h1>다른 운영팀이 처리 중인 신고입니다.</h1>");
+            }
             throw err;
         }
         await logAdminAction({
