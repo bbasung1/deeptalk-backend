@@ -300,7 +300,8 @@ async function autoReleaseExpiredSanctions(userId) {
     if (!user) return null;
 
     const update = {};
-    if (user.suspended_until && new Date(user.suspended_until) < new Date()) {
+    // banned는 suspended_until 값과 무관하게 별도 조치(unsuspend) 전까지 유지되어야 함.
+    if (user.status !== "banned" && user.suspended_until && new Date(user.suspended_until) < new Date()) {
         update.status = "normal";
         update.suspended_until = null;
     }

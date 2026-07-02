@@ -33,7 +33,9 @@ function buildUserSanctionUpdate(trx, action, durationHours) {
             return update;
         }
         case "banned":
-            return { status: "banned" };
+            // suspended 상태였다가 banned로 상향되는 경우 이전 suspended_until이 남아있으면
+            // autoReleaseExpiredSanctions(admin_api.js)가 만료로 오인해 status를 normal로 되돌릴 수 있음.
+            return { status: "banned", suspended_until: null };
         case "unsuspend":
             // MBR-008 정지 해제. 원본 명세서 기준 복수 제재 존재 여부 확인 로직은 확정 안 됨(admin 명세서
             // 버전 문제로 보류 — docs/admin_dev_priority.md 참고) — 지금은 무조건 normal로 리셋하는
