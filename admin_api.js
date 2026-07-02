@@ -295,24 +295,24 @@ router.post(
 // 멤버 상세 조회할 때마다 만료된 제재를 정리한다. 원본 명세서 버전들 사이에 "다른 활성 제재 확인 후
 // 재계산" vs "무조건 normal로 리셋"이 갈려서(admin 명세서 버전 미확정 — docs/admin_dev_priority.md 참고)
 // 더 단순한 무조건 리셋 쪽으로 구현했다. 나중에 정책이 확정되면 여기만 고치면 됨.
+// SELECT로 읽은 값을 근거로 별도 UPDATE를 날리면 그 사이에 다른 요청(예: applyMemberSanction의
+// banned 처리)이 끼어들 때 상태가 덮어써질 수 있어(TOCTOU), 조건을 WHERE절에 그대로 실어 원자적
+// 조건부 UPDATE로 처리한다. banned는 suspended_until 값과 무관하게 별도 조치(unsuspend) 전까지 유지.
 async function autoReleaseExpiredSanctions(userId) {
-    const user = await knex("user").where({ id: userId }).first();
-    if (!user) return null;
+    await knex("user")
+        .where({ id: userId })
+        .andWhere("status", "!=", "banned")
+        .whereNotNull("suspended_until")
+        .andWhere("suspended_until", "<", knex.fn.now())
+        .update({ status: "normal", suspended_until: null });
 
-    const update = {};
-    // banned는 suspended_until 값과 무관하게 별도 조치(unsuspend) 전까지 유지되어야 함.
-    if (user.status !== "banned" && user.suspended_until && new Date(user.suspended_until) < new Date()) {
-        update.status = "normal";
-        update.suspended_until = null;
-    }
-    if (user.write_restricted_until && new Date(user.write_restricted_until) < new Date()) {
-        update.write_restricted_until = null;
-    }
-    if (Object.keys(update).length > 0) {
-        await knex("user").where({ id: userId }).update(update);
-        return { ...user, ...update };
-    }
-    return user;
+    await knex("user")
+        .where({ id: userId })
+        .whereNotNull("write_restricted_until")
+        .andWhere("write_restricted_until", "<", knex.fn.now())
+        .update({ write_restricted_until: null });
+
+    return knex("user").where({ id: userId }).first();
 }
 
 function deriveProvider(user) {
