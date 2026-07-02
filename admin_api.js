@@ -13,6 +13,8 @@ const {
     revokeAdminToken,
     getTokenFromAuthHeader,
 } = require("./utils/adminAuth.js");
+const { logAdminAction } = require("./utils/auditLog.js");
+const { isValidActionType, applyReportAction } = require("./utils/reportActions.js");
 
 // 개발 중에는 Vite 기본 포트, 배포 시에는 .env의 ADMIN_WEB_ORIGIN으로 교체.
 const ADMIN_WEB_ORIGIN = process.env.ADMIN_WEB_ORIGIN || "http://localhost:5173";
@@ -72,6 +74,46 @@ router.get(
     "/me",
     requireAdminApi(async (req, res) => {
         res.json({ success: 1, admin: req.admin });
+    })
+);
+
+// 신고 처리 액션 실행(RPT-006). React 프론트엔드용 — admin.js의 /admin/setblock/status(레거시 HTML 폼)와
+// 동일한 utils/reportActions.js를 공유한다. body: { action_type, memo, resolution_type, duration_hours }
+// - resolution_type: action_type이 "dismissed"일 때만 의미 있음(dismissed/duplicate/insufficient_evidence 드롭다운 값)
+// - duration_hours: action_type이 "write_restricted"/"account_suspended"일 때 제재 기간(시간 단위, 프리셋 3/7/30일도
+//   호출부에서 시간으로 환산해서 보낸다). 없으면 기간 없이 상태만 바뀜.
+router.post(
+    "/reports/:report_id/actions",
+    requireAdminApi(async (req, res) => {
+        const report_id = parseInt(req.params.report_id, 10);
+        const { action_type, memo, resolution_type, duration_hours } = req.body;
+        if (isNaN(report_id) || !isValidActionType(action_type)) {
+            return res.status(400).json({ success: 0, msg: "잘못된 요청입니다." });
+        }
+        try {
+            const result = await applyReportAction(knex, {
+                report_id,
+                action_type,
+                memo,
+                resolutionTypeOverride: resolution_type,
+                durationHours: duration_hours,
+                adminId: req.admin.id,
+            });
+            await logAdminAction({
+                adminId: req.admin.id,
+                action: "report_status_change",
+                target_type: "report",
+                target_id: report_id,
+                detail: `action_type=${action_type}, status=${result.status}, resolution_type=${result.resolution_type ?? "null"}`,
+            });
+            return res.json({ success: 1, status: result.status, resolution_type: result.resolution_type });
+        } catch (err) {
+            if (err.message === "REPORT_NOT_FOUND") {
+                return res.status(404).json({ success: 0, msg: "존재하지 않는 신고입니다." });
+            }
+            console.error("Error in report action API:", err);
+            return res.status(500).json({ success: 0, msg: "서버 오류가 발생했습니다." });
+        }
     })
 );
 
