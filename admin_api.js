@@ -14,7 +14,12 @@ const {
     getTokenFromAuthHeader,
 } = require("./utils/adminAuth.js");
 const { logAdminAction } = require("./utils/auditLog.js");
-const { isValidActionType, applyReportAction } = require("./utils/reportActions.js");
+const {
+    isValidActionType,
+    applyReportAction,
+    classifyReportTab,
+    getReportTypeFilterForTab,
+} = require("./utils/reportActions.js");
 
 // 개발 중에는 Vite 기본 포트, 배포 시에는 .env의 ADMIN_WEB_ORIGIN으로 교체.
 const ADMIN_WEB_ORIGIN = process.env.ADMIN_WEB_ORIGIN || "http://localhost:5173";
@@ -74,6 +79,133 @@ router.get(
     "/me",
     requireAdminApi(async (req, res) => {
         res.json({ success: 1, admin: req.admin });
+    })
+);
+
+// 신고 목록 조회(PHN-001~004). tab으로 필터, 긴급 플래그 우선 + 접수시각 오름차순 정렬(PHN-002).
+// query: tab(all/report/appeal/feedback/error/other/history, 기본 all), page(기본 1), limit(기본 30, 최대 100)
+// "history"(처리 이력) 탭은 report_type이 아니라 status 기준 — resolved/appeal_resolved인 건 전체.
+// 라우트 등록 순서 주의: /reports/counts, /reports/:report_id보다 먼저 정의해야 하는 리스트 라우트라
+// 경로 충돌은 없지만(둘 다 /reports 바로 아래), /reports/counts는 /reports/:report_id보다 먼저 등록해야
+// Express가 "counts"를 report_id로 착각해서 매칭하지 않는다 — 아래 counts 라우트 위치 참고.
+router.get(
+    "/reports",
+    requireAdminApi(async (req, res) => {
+        const { tab = "all" } = req.query;
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 30));
+        const offset = (page - 1) * limit;
+
+        const baseQuery = knex("report as r")
+            .leftJoin("profile as reporter_p", "reporter_p.id", "r.reporter_id")
+            .leftJoin("profile as reported_p", "reported_p.id", "r.reported_id");
+
+        if (tab === "history") {
+            baseQuery.whereIn("r.status", ["resolved", "appeal_resolved"]);
+        } else if (tab !== "all") {
+            const filter = getReportTypeFilterForTab(tab);
+            if (!filter) {
+                return res.status(400).json({ success: 0, msg: "잘못된 tab 값입니다." });
+            }
+            if (filter.exclude) {
+                baseQuery.whereNotIn("r.report_type", filter.exclude);
+            } else {
+                baseQuery.where("r.report_type", filter.equals);
+            }
+        }
+
+        const totalRow = await baseQuery.clone().count("r.report_id as count").first();
+        const rows = await baseQuery
+            .clone()
+            .select(
+                "r.report_id",
+                "r.report_type",
+                "r.category",
+                "r.status",
+                "r.resolution_type",
+                "r.is_urgent",
+                "r.target_type",
+                "r.target_subtype",
+                "r.report_time",
+                knex.raw("LEFT(r.reason, 50) as reason_preview"),
+                "reporter_p.nickname as reporter_nickname",
+                "reported_p.nickname as reported_nickname"
+            )
+            .orderBy([
+                { column: "r.is_urgent", order: "desc" },
+                { column: "r.report_time", order: "asc" },
+            ])
+            .limit(limit)
+            .offset(offset);
+
+        return res.json({
+            success: 1,
+            reports: rows,
+            pagination: { page, limit, total: Number(totalRow.count) },
+        });
+    })
+);
+
+// 탭별 미처리 건수(PHN-001 배지). /reports/:report_id보다 먼저 등록 — 안 그러면 "counts"가 report_id로 매칭됨.
+router.get(
+    "/reports/counts",
+    requireAdminApi(async (req, res) => {
+        const UNPROCESSED_STATUSES = ["pending", "ai_analyzing", "ai_done", "ai_failed", "reviewing"];
+        const rows = await knex("report").whereIn("status", UNPROCESSED_STATUSES).select("report_type");
+        const counts = { all: rows.length, report: 0, appeal: 0, feedback: 0, error: 0, other: 0 };
+        for (const row of rows) {
+            const tab = classifyReportTab(row.report_type);
+            counts[tab] = (counts[tab] || 0) + 1;
+        }
+        return res.json({ success: 1, counts });
+    })
+);
+
+// 신고 상세 조회(RPT-001~003). 신고 정보 + 신고자/피신고자 닉네임 + 최신 증거 스냅샷 + 처리 이력.
+// 계정 신고 상세(RPT-004/005)의 봇/사칭 의심 신호, 이전 제재 이력 집계 등은 아직 미포함 — 후속 작업.
+router.get(
+    "/reports/:report_id",
+    requireAdminApi(async (req, res) => {
+        const report_id = parseInt(req.params.report_id, 10);
+        if (isNaN(report_id)) {
+            return res.status(400).json({ success: 0, msg: "잘못된 요청입니다." });
+        }
+
+        const report = await knex("report as r")
+            .leftJoin("profile as reporter_p", "reporter_p.id", "r.reporter_id")
+            .leftJoin("profile as reported_p", "reported_p.id", "r.reported_id")
+            .leftJoin("user as reported_u", "reported_u.id", "r.reported_id")
+            .where("r.report_id", report_id)
+            .select(
+                "r.*",
+                "reporter_p.nickname as reporter_nickname",
+                "reported_p.nickname as reported_nickname",
+                "reported_u.status as reported_user_status",
+                "reported_u.created_at as reported_user_created_at"
+            )
+            .first();
+
+        if (!report) {
+            return res.status(404).json({ success: 0, msg: "존재하지 않는 신고입니다." });
+        }
+
+        const evidenceSnapshot = await knex("report_evidence_snapshots")
+            .where({ report_id })
+            .orderBy("created_at", "desc")
+            .first();
+
+        const actions = await knex("report_actions as ra")
+            .leftJoin("admins as a", "a.id", "ra.admin_id")
+            .where("ra.report_id", report_id)
+            .select("ra.id", "ra.action_type", "ra.memo", "ra.created_at", "a.name as admin_name")
+            .orderBy("ra.created_at", "desc");
+
+        return res.json({
+            success: 1,
+            report,
+            evidence_snapshot: evidenceSnapshot || null,
+            actions,
+        });
     })
 );
 

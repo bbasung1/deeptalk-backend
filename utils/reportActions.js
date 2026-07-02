@@ -30,6 +30,36 @@ const REPORT_ACTION_TO_RESOLUTION_TYPE = {
 // [무혐의] 선택 시 드롭다운으로 고를 수 있는 세부 사유 (기획자 확인 2026-07-01).
 const DISMISSED_RESOLUTION_TYPES = new Set(["dismissed", "duplicate", "insufficient_evidence"]);
 
+// PHN-001 탭 분류. 원본 명세서는 report_type을 'report'/'appeal'/'feedback'/'error'/'other' 같은
+// 깔끔한 enum으로 가정했지만, 실제 report.js는 앱 UI에서 고른 한국어 문구를 report_type에 그대로 저장한다
+// (예: "욕설", "게시물신고", "오류가 있어요"). 그래서 report.js의 none_post_report_types와 동일한
+// 문자열 목록으로 탭을 분류한다 — 두 목록이 어긋나면 새 신고 유형이 엉뚱한 탭에 들어갈 수 있으니
+// report.js에서 이 목록을 가져다 쓰게 해서 하나로 유지한다.
+const REPORT_TYPE_TAB_MAP = {
+    "처분에 대해 이의를 제기하고 싶어요": "appeal",
+    "클럽에게 피드백 하고 싶어요": "feedback",
+    "오류가 있어요": "error",
+    "기타": "other",
+};
+// report.js가 post_id 없이 접수하는(콘텐츠에 안 달리는) 신고 유형 전체.
+// "유저를 신고하고 싶어요"는 계정 신고라 post_id는 없지만 탭 분류는 "report"로 남는다(REPORT_TYPE_TAB_MAP에 없음).
+const NONE_POST_REPORT_TYPES = [...Object.keys(REPORT_TYPE_TAB_MAP), "유저를 신고하고 싶어요"];
+
+// report_type 문자열 -> PHN-001 탭. 위 4개 특수 유형이 아니면 전부 "report"(신고) 탭.
+function classifyReportTab(report_type) {
+    return REPORT_TYPE_TAB_MAP[report_type] || "report";
+}
+
+// 탭 -> report_type 필터. "report"는 특정 문자열이 아니라 "4개 특수 유형이 아닌 전부"이므로
+// { exclude: [...] } 형태로, 나머지는 { equals: "..." } 형태로 반환해서 호출부가 where/whereNotIn을 고르게 한다.
+function getReportTypeFilterForTab(tab) {
+    if (tab === "report") {
+        return { exclude: Object.keys(REPORT_TYPE_TAB_MAP) };
+    }
+    const reportType = Object.keys(REPORT_TYPE_TAB_MAP).find((key) => REPORT_TYPE_TAB_MAP[key] === tab);
+    return reportType ? { equals: reportType } : null;
+}
+
 // report.target_subtype -> 실제 콘텐츠 테이블/PK 컬럼. user_account/profile은 계정 신고라 콘텐츠 삭제 대상이 아님.
 // quote/bot_suspected/impersonation은 report.js의 신고 생성 플로우에서 아직 발급되지 않는 값이라(post_type이
 // think/talk/comment/user로만 제한됨) 지금은 talk/think/comment 세 가지만 처리하면 충분하다.
@@ -127,6 +157,9 @@ module.exports = {
     REPORT_ACTION_TO_STATUS,
     REPORT_ACTION_TO_RESOLUTION_TYPE,
     DISMISSED_RESOLUTION_TYPES,
+    NONE_POST_REPORT_TYPES,
     isValidActionType,
     applyReportAction,
+    classifyReportTab,
+    getReportTypeFilterForTab,
 };
