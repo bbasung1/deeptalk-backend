@@ -14,6 +14,8 @@ const {
     revokeAdminToken,
     getTokenFromCookie: getAdminTokenFromCookie,
 } = require("./utils/adminAuth.js");
+const { logAdminAction } = require("./utils/auditLog.js");
+const { isValidActionType, applyReportAction } = require("./utils/reportActions.js");
 
 // 로그인 브루트포스 방어. IP당 15분에 10회로 제한 — 비밀번호 대량 시도를 막는 게 목적이라
 // 정상적인 재시도(오타 등)는 넉넉하게 허용하는 수준으로 잡음.
@@ -121,87 +123,34 @@ function escapeHtml(value) {
         .replace(/'/g, "&#39;");
 }
 
-// 어드민 운영 행위 감사 로그(admin_audit_logs) 기록 헬퍼.
-// adminId는 호출부에서 req.admin.id를 넘겨준다(개별 관리자 로그인 도입 완료, sql/add_admin_audit_logs_table.sql 참고).
-// detail에는 비밀번호/토큰 등 민감정보를 절대 넣지 말 것 — 이 함수를 호출하는 곳에서 직접 주의해야 함.
-// 감사 로그 기록 실패가 본래 동작(신고 처리, 메시지 발송 등)을 막아서는 안 되므로 에러는 흡수만 함.
-async function logAdminAction({ adminId = null, action, target_type = null, target_id = null, detail = null }) {
-    try {
-        await knex("admin_audit_logs").insert({
-            admin_id: adminId,
-            action,
-            target_type,
-            target_id: target_id === null || target_id === undefined ? null : String(target_id),
-            detail,
-        });
-    } catch (err) {
-        console.error("Error in logAdminAction:", err);
-    }
-}
-
-// 신고 처리 상태 변경 + 처리 내역(report_actions) 기록.
-// report.status는 처리 라이프사이클만 담당 (sql/alter_report_status_enum_v2.sql 참고).
-// report.resolution_type은 "처리 결과가 무엇이었나"를 담당 (sql/alter_report_add_resolution_type_column.sql 참고).
-// "어떻게 처리됐는지"는 report_actions.action_type에 그대로 기록되므로 정보 손실 없음.
-// admin_id는 req.admin(JWT 인증, utils/adminAuth.js의 requireAdmin)에서 가져온다.
-const REPORT_ACTION_TO_STATUS = {
-    notice: "resolved",
-    warning: "resolved",
-    write_restricted: "resolved",
-    content_deleted: "resolved",
-    account_suspended: "resolved",
-    account_banned: "resolved",
-    dismissed: "resolved",
-    no_action: "reviewing",
-};
-// action_type → resolution_type 매핑.
-// null이면 resolution_type을 업데이트하지 않음 (no_action은 resolved가 아니므로 NULL 유지).
-// dismissed는 request body의 resolution_type 값으로 결정 (아래 로직 참고).
-const REPORT_ACTION_TO_RESOLUTION_TYPE = {
-    notice: "notice_only",
-    warning: "action_taken",
-    write_restricted: "action_taken",
-    content_deleted: "action_taken",
-    account_suspended: "action_taken",
-    account_banned: "action_taken",
-    dismissed: null, // request body에서 결정
-    no_action: null,
-};
-// [무혐의] 선택 시 드롭다운으로 고를 수 있는 세부 사유 (기획자 확인 2026-07-01).
-const DISMISSED_RESOLUTION_TYPES = new Set(["dismissed", "duplicate", "insufficient_evidence"]);
+// 신고 처리 상태 변경 + 처리 내역(report_actions) 기록 + (해당하면) 유저 제재/콘텐츠 삭제 반영.
+// 핵심 로직은 admin_api.js(신규 JSON API)와 공유하는 utils/reportActions.js의 applyReportAction()에 있다.
+// 레거시 HTML 폼은 기간(duration)/무혐의 세부사유 입력 필드가 없어 그 값들은 undefined로 넘어가고,
+// applyReportAction이 알아서 "값 없으면 갱신 안 함"으로 처리한다 — 폼에 필드 추가는 React 쪽에서 진행.
 async function update_report_status(req, res) {
     try {
         const report_id = parseInt(req.body.report_id);
-        const { action_type, memo, resolution_type: bodyResolutionType } = req.body;
-        if (isNaN(report_id) || !Object.prototype.hasOwnProperty.call(REPORT_ACTION_TO_STATUS, action_type)) {
+        const { action_type, memo, resolution_type: bodyResolutionType, duration_hours } = req.body;
+        if (isNaN(report_id) || !isValidActionType(action_type)) {
             return res.end("<h1>잘못된 요청입니다.</h1>");
         }
-        const status = REPORT_ACTION_TO_STATUS[action_type];
-        // resolution_type 결정: dismissed는 드롭다운 선택값 사용, 나머지는 맵에서 파생.
-        let resolution_type;
-        if (action_type === "dismissed") {
-            resolution_type = DISMISSED_RESOLUTION_TYPES.has(bodyResolutionType)
-                ? bodyResolutionType
-                : "dismissed"; // 드롭다운 미전송 시 기본값
-        } else {
-            resolution_type = REPORT_ACTION_TO_RESOLUTION_TYPE[action_type]; // null이면 업데이트 안 함
-        }
-        const reportUpdate = { status };
-        if (resolution_type !== null && resolution_type !== undefined) {
-            reportUpdate.resolution_type = resolution_type;
-        }
-        const trx = await knex.transaction();
+        let result;
         try {
-            await trx("report").where("report_id", report_id).update(reportUpdate);
-            await trx("report_actions").insert({
+            result = await applyReportAction(knex, {
                 report_id,
-                admin_id: req.admin.id,
                 action_type,
-                memo: memo || null,
+                memo,
+                resolutionTypeOverride: bodyResolutionType,
+                durationHours: duration_hours,
+                adminId: req.admin.id,
             });
-            await trx.commit();
         } catch (err) {
-            await trx.rollback();
+            if (err.message === "REPORT_NOT_FOUND") {
+                return res.end("<h1>존재하지 않는 신고입니다.</h1>");
+            }
+            if (err.message === "REPORT_LOCKED") {
+                return res.end("<h1>다른 운영팀이 처리 중인 신고입니다.</h1>");
+            }
             throw err;
         }
         await logAdminAction({
@@ -209,7 +158,7 @@ async function update_report_status(req, res) {
             action: "report_status_change",
             target_type: "report",
             target_id: report_id,
-            detail: `action_type=${action_type}, status=${status}, resolution_type=${resolution_type ?? "null"}`,
+            detail: `action_type=${action_type}, status=${result.status}, resolution_type=${result.resolution_type ?? "null"}`,
         });
         res.redirect("/admin/setblock");
     } catch (error) {
